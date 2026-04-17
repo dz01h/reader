@@ -17,6 +17,14 @@ class ZenSettings {
         this.fontSizeDisplay = document.getElementById('setting-font-size-display');
         this.lineHeightInput = document.getElementById('setting-line-height');
         this.lineHeightDisplay = document.getElementById('setting-line-height-display');
+        this.marginTopInput = document.getElementById('setting-margin-top');
+        this.marginTopDisplay = document.getElementById('setting-margin-top-display');
+        this.marginBottomInput = document.getElementById('setting-margin-bottom');
+        this.marginBottomDisplay = document.getElementById('setting-margin-bottom-display');
+        this.marginLeftInput = document.getElementById('setting-margin-left');
+        this.marginLeftDisplay = document.getElementById('setting-margin-left-display');
+        this.marginRightInput = document.getElementById('setting-margin-right');
+        this.marginRightDisplay = document.getElementById('setting-margin-right-display');
         
         this.quadTLSelect = document.getElementById('setting-quad-tl');
         this.quadTRSelect = document.getElementById('setting-quad-tr');
@@ -24,6 +32,10 @@ class ZenSettings {
         this.quadBRSelect = document.getElementById('setting-quad-br');
         this.googleClientIdInput = document.getElementById('setting-google-client-id');
         this.langSelect = document.getElementById('setting-lang');
+        
+        this.btnSyncQr = document.getElementById('btn-sync-qr');
+        this.qrContainer = document.getElementById('qr-container');
+        this.qrCodeEl = document.getElementById('qr-code');
     }
 
     syncUI() {
@@ -34,6 +46,24 @@ class ZenSettings {
         this.fontSizeDisplay.textContent = `${this.app.currentFontSize}px`;
         this.lineHeightInput.value = this.app.currentLineHeight;
         this.lineHeightDisplay.textContent = this.app.currentLineHeight;
+        if (this.app.margins) {
+            if (this.marginTopInput) {
+                this.marginTopInput.value = this.app.margins.top;
+                this.marginTopDisplay.textContent = this.app.margins.top;
+            }
+            if (this.marginBottomInput) {
+                this.marginBottomInput.value = this.app.margins.bottom;
+                this.marginBottomDisplay.textContent = this.app.margins.bottom;
+            }
+            if (this.marginLeftInput) {
+                this.marginLeftInput.value = this.app.margins.left;
+                this.marginLeftDisplay.textContent = this.app.margins.left;
+            }
+            if (this.marginRightInput) {
+                this.marginRightInput.value = this.app.margins.right;
+                this.marginRightDisplay.textContent = this.app.margins.right;
+            }
+        }
         
         this.quadTLSelect.value = this.app.quadTL;
         this.quadTRSelect.value = this.app.quadTR;
@@ -88,6 +118,35 @@ class ZenSettings {
             this.app.setLineHeight(ratio);
         });
 
+        if (this.marginTopInput) {
+            this.marginTopInput.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value, 10);
+                this.marginTopDisplay.textContent = val;
+                this.app.setMargins({ top: val });
+            });
+        }
+        if (this.marginBottomInput) {
+            this.marginBottomInput.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value, 10);
+                this.marginBottomDisplay.textContent = val;
+                this.app.setMargins({ bottom: val });
+            });
+        }
+        if (this.marginLeftInput) {
+            this.marginLeftInput.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value, 10);
+                this.marginLeftDisplay.textContent = val;
+                this.app.setMargins({ left: val });
+            });
+        }
+        if (this.marginRightInput) {
+            this.marginRightInput.addEventListener('input', (e) => {
+                const val = parseInt(e.target.value, 10);
+                this.marginRightDisplay.textContent = val;
+                this.app.setMargins({ right: val });
+            });
+        }
+
         this.quadTLSelect.addEventListener('change', (e) => this.app.setQuad('TL', e.target.value));
         this.quadTRSelect.addEventListener('change', (e) => this.app.setQuad('TR', e.target.value));
         this.quadBLSelect.addEventListener('change', (e) => this.app.setQuad('BL', e.target.value));
@@ -97,6 +156,53 @@ class ZenSettings {
         
         if (this.langSelect) {
             this.langSelect.addEventListener('change', (e) => this.app.setLanguage(e.target.value));
+        }
+
+        if (this.btnSyncQr) {
+            this.btnSyncQr.addEventListener('click', (e) => this.generateSyncQR(e));
+        }
+    }
+
+    generateSyncQR(e) {
+        e.preventDefault();
+        
+        if (this.qrContainer.classList.contains('hidden')) {
+            // Check if user has entered anything useful
+            if (!this.app.currentGoogleClientId) {
+                this.app.showToast(this.app.i18n ? this.app.i18n.t('errorNoClientId') || '請先輸入 Client ID 再產生同步碼' : '請先輸入 Client ID');
+                return;
+            }
+
+            this.qrContainer.classList.remove('hidden');
+            this.qrCodeEl.innerHTML = '';
+            
+            // Serialize settings
+            const state = {
+                clientId: this.app.currentGoogleClientId,
+                lang: this.app.i18n ? this.app.i18n.lang : 'en',
+                theme: document.documentElement.getAttribute('data-theme'),
+                fontSize: this.app.currentFontSize,
+                lineHeight: this.app.currentLineHeight,
+                margins: this.app.margins
+            };
+            
+            // Encode
+            const payload = btoa(JSON.stringify(state));
+            
+            // Construct sync URL using github pages base path (window.location.origin + pathname)
+            const baseUrl = window.location.origin + window.location.pathname;
+            const syncUrl = `${baseUrl}?sync=${payload}`;
+            
+            new QRCode(this.qrCodeEl, {
+                text: syncUrl,
+                width: 200,
+                height: 200,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.L
+            });
+        } else {
+            this.qrContainer.classList.add('hidden');
         }
     }
 }

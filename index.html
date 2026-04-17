@@ -128,6 +128,25 @@
                 <label><span data-i18n="settingLineHeight">行距: </span><span id="setting-line-height-display">1.8</span></label>
                 <input type="range" id="setting-line-height" min="1.0" max="3.0" step="0.1" value="1.8">
             </div>
+            <fieldset class="setting-fieldset">
+                <legend data-i18n="settingMarginsGroup">邊距設定 (Pixels)</legend>
+                <div class="setting-group">
+                    <label><span data-i18n="settingMarginTop">上: </span><span id="setting-margin-top-display">30</span></label>
+                    <input type="range" id="setting-margin-top" min="0" max="150" step="1" value="30">
+                </div>
+                <div class="setting-group">
+                    <label><span data-i18n="settingMarginBottom">下: </span><span id="setting-margin-bottom-display">30</span></label>
+                    <input type="range" id="setting-margin-bottom" min="0" max="150" step="1" value="30">
+                </div>
+                <div class="setting-group">
+                    <label><span data-i18n="settingMarginLeft">左: </span><span id="setting-margin-left-display">30</span></label>
+                    <input type="range" id="setting-margin-left" min="0" max="150" step="1" value="30">
+                </div>
+                <div class="setting-group">
+                    <label><span data-i18n="settingMarginRight">右: </span><span id="setting-margin-right-display">30</span></label>
+                    <input type="range" id="setting-margin-right" min="0" max="150" step="1" value="30">
+                </div>
+            </fieldset>
 
             <fieldset class="setting-fieldset">
                 <legend data-i18n="settingQuadrants">點擊四象限 (隱形換頁按鈕)</legend>
@@ -173,8 +192,16 @@
                 <legend data-i18n="settingAdvanced">進階整合</legend>
                 <div class="setting-group">
                     <label for="setting-google-client-id" data-i18n="settingGoogleClientId">Google Client ID</label>
-                    <input type="text" id="setting-google-client-id" data-i18n="placeholder:googleIdPlaceholder" placeholder="xxxxx.apps.googleusercontent.com">
+                    <div style="display:flex; gap: 0.5rem; align-items: stretch;">
+                        <input type="text" id="setting-google-client-id" style="flex:1" data-i18n="placeholder:googleIdPlaceholder" placeholder="xxxxx.apps.googleusercontent.com">
+                        <button id="btn-sync-qr" class="btn-primary" style="padding:0 0.75rem" title="產生同步 QR Code">📱</button>
+                    </div>
                     <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.25rem;" data-i18n="googleIdHint">填寫您專屬的用戶端 ID 以存取私人 Google Drive</p>
+                </div>
+                
+                <div id="qr-container" class="hidden" style="margin-top: 1rem; text-align: center; background: white; padding: 1rem; border-radius: 8px;">
+                    <div id="qr-code"></div>
+                    <p style="color: black; font-size: 0.8rem; margin-top: 0.5rem; font-weight: bold;">使用手機掃描以上 QR Code 即可自動同步設定</p>
                 </div>
             </fieldset>
         </div>
@@ -182,6 +209,7 @@
 
     <!-- JS Engine and logic imports -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="js/db.js"></script>
     <script src="js/i18n.js"></script>
     <script src="js/engine.js"></script>

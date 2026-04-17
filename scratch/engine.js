@@ -4,13 +4,20 @@ class ZenEngine {
         this.ctx = ctx;
     }
 
-    // 將整個文件直接排版為長卷軸 (無縫卷軸)
-    layoutDocument(text, fontSize, mode, cw, ch, lineHeightRatio = 1.8, fontFamily = 'sans-serif', margins = { top: 30, bottom: 30, left: 30, right: 30 }) {
+    // Lays out the ENTIRE document efficiently for continuous scroll
+    layoutDocument(text, fontSize, mode, lineHeightRatio = 1.8, fontFamily = 'sans-serif') {
+        const cw = this.canvas.width / window.devicePixelRatio;
+        const ch = this.canvas.height / window.devicePixelRatio;
+        
         const lineHeight = fontSize * lineHeightRatio;
         const charSpacing = Math.max(1, fontSize * 0.05);
 
-        let x = mode === 'vertical' ? cw - margins.right - fontSize : margins.left;
-        let y = margins.top;
+        // Padding
+        const paddingX = Math.max(fontSize, 20); 
+        const paddingY = Math.max(fontSize * 1.5, 30);
+
+        let x = mode === 'vertical' ? cw - paddingX - fontSize : paddingX;
+        let y = paddingY;
         
         const drawOps = [];
         let justAutoWrapped = false;
@@ -28,9 +35,9 @@ class ZenEngine {
             if (char === '\n') {
                 if (!justAutoWrapped) {
                     if (mode === 'vertical') {
-                        x -= lineHeight; y = margins.top;
+                        x -= lineHeight; y = paddingY;
                     } else {
-                        y += lineHeight; x = margins.left;
+                        y += lineHeight; x = paddingX;
                     }
                 }
                 justAutoWrapped = false;
@@ -48,17 +55,18 @@ class ZenEngine {
 
             if (mode === 'vertical') {
                 const verticalAdvance = isRotated && isAscii ? charW : fontSize;
-                if (y + verticalAdvance > ch - margins.bottom) {
+                
+                if (y + verticalAdvance > ch - paddingY) {
                     x -= lineHeight; 
-                    y = margins.top;
+                    y = paddingY;
                     justAutoWrapped = true;
                 }
                 drawOps.push({ char, x, y, isRotated, charIndex: i });
                 y += verticalAdvance + charSpacing;
             } else {
-                if (x + charW > cw - margins.right) {
+                if (x + charW > cw - paddingX) {
                     y += lineHeight; 
-                    x = margins.left;
+                    x = paddingX;
                     justAutoWrapped = true;
                 }
                 drawOps.push({ char, x, y, isRotated: false, charIndex: i });
@@ -67,12 +75,16 @@ class ZenEngine {
             i++;
         }
         
+        // Final Bounds Calculation
         let maxScroll = 0;
         if (mode === 'vertical') {
-            const docWidth = cw - x + margins.left;
+            // Document grows negatively in X. Total width is how far negative X went.
+            // Width needed = paddingX to start, and extends to (cw - (x - paddingX))
+            // Maximum scroll offset (we scroll by modifying X offset towards POSITIVE)
+            const docWidth = cw - x + paddingX;
             maxScroll = Math.max(0, docWidth - cw);
         } else {
-            const docHeight = y + fontSize + margins.bottom;
+            const docHeight = y + fontSize + paddingY;
             maxScroll = Math.max(0, docHeight - ch);
         }
 
@@ -80,46 +92,48 @@ class ZenEngine {
     }
 
     drawOperations(drawOps, scrollOffset, fontSize, mode, cw, ch, fontFamily = 'sans-serif') {
-        const dpr = Math.max(window.devicePixelRatio || 1, 2); // Match app.js strict retina policy
-        
-        // Reset transform to identity matrix to guarantee full clear Rect works
-        this.ctx.setTransform(1, 0, 0, 1, 0, 0); 
+        const dpr = window.devicePixelRatio || 1;
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        this.ctx.scale(dpr, dpr);
+        // Translate for continuous scrolling
         this.ctx.save();
+        this.ctx.scale(dpr, dpr);
         
         if (mode === 'vertical') {
-            this.ctx.translate(scrollOffset, 0);
+            this.ctx.translate(scrollOffset, 0); // Scroll right to reveal negative X
         } else {
-            this.ctx.translate(0, -scrollOffset);
+            this.ctx.translate(0, -scrollOffset); // Scroll down to reveal positive Y
         }
         
         this.ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--color-text').trim() || '#ffffff';
         this.ctx.font = `${fontSize}px ${fontFamily}`;
         this.ctx.textBaseline = 'top';
 
+        // Optimized culling bounds (what's visible on screen)
         const cullBuffer = fontSize * 2;
         let visibleMin, visibleMax;
         
         if (mode === 'vertical') {
+            // screen represents [ -scrollOffset, cw - scrollOffset ]
             visibleMin = -scrollOffset - cullBuffer;
             visibleMax = cw - scrollOffset + cullBuffer;
         } else {
+            // screen represents [ scrollOffset, ch + scrollOffset ]
             visibleMin = scrollOffset - cullBuffer;
             visibleMax = ch + scrollOffset + cullBuffer;
         }
 
+        // Binary search to find start index (Optional, can just iterate for fast 1M chars but filtering visually is safer)
         for (let i = 0; i < drawOps.length; i++) {
             const op = drawOps[i];
             const coord = mode === 'vertical' ? op.x : op.y;
             
-            // Fast culling
+            // Check visibility
             if (coord > visibleMax) {
-                if (mode === 'horizontal') break; 
+                if (mode === 'horizontal') break; // Early exit for horizontal since y is monotonically increasing!
             }
             if (coord < visibleMin) {
-                if (mode === 'vertical') break; 
+                if (mode === 'vertical') break; // Early exit for vertical since x is monotonically decreasing!
             }
 
             if (coord >= visibleMin && coord <= visibleMax) {

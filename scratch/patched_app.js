@@ -5,20 +5,8 @@ class ZenReaderApp {
         this.currentWritingMode = 'horizontal';
         this.currentFontFamily = 'sans-serif';
         this.currentLineHeight = 1.8;
-        this.margins = { top: 30, bottom: 30, left: 30, right: 30 };
-        this.currentBookContent = '';
-        this.drawOps = [];
-        this.scrollOffset = 0;
-        this.maxScroll = 0;
-        
-        // Touch Drag State
-        this.isDragging = false;
-        this.lastDragCoord = 0;
-        this.velocity = 0;
-        this.lastTime = 0;
-        this.inertiaFrameId = null;
-
-        this.pageOffsets = [0]; // fallback safely removed later
+        this.currentBookContent = "";
+        this.pageOffsets = [0]; 
         this.currentPageIndex = 0;
         this.savedPositions = {}; 
         
@@ -118,11 +106,6 @@ class ZenReaderApp {
                 if (state.lineHeight) {
                     this.currentLineHeight = state.lineHeight;
                 }
-                if (state.margins) {
-                    this.margins = state.margins;
-                } else if (state.margin !== undefined) {
-                    this.margins = { top: state.margin, bottom: state.margin, left: state.margin, right: state.margin };
-                }
                 if (state.positions) {
                     this.savedPositions = state.positions;
                 }
@@ -183,65 +166,67 @@ class ZenReaderApp {
     saveProgress() {
         const title = this.els.documentTitle.textContent;
         if (title && this.currentBookContent) {
-            this.savedPositions[title] = this.scrollOffset;
+            const charIndex = this.scrollOffset;
+            this.savedPositions[title] = charIndex;
             this.saveState({ positions: this.savedPositions });
         }
     }
 
-    rebuildAndShow(targetScroll = 0) {
+    rebuildAndShow(targetCharIndex) {
         if (!this.currentBookContent) return;
+        this.pageOffsets = [0];
+        let curr = 0;
+        let pIndex = 0;
         
-        const rect = this.els.canvas.getBoundingClientRect();
-        const cw = rect.width;
-        const ch = rect.height;
+        // Fast-forward layout to target
+        if (targetCharIndex > 0) {
+            while (true) {
+                const { nextIndex } = this.engine.layoutPage(this.currentBookContent, curr, this.currentFontSize, this.currentWritingMode, this.currentLineHeight, this.currentFontFamily);
+                if (nextIndex <= curr) break; // Avoid infinite error
+                
+                // If the natural page boundary surpasses our target, we force an exact cut at the target
+                if (nextIndex > targetCharIndex) {
+                    if (curr !== targetCharIndex) {
+                        this.pageOffsets.push(targetCharIndex);
+                        pIndex++;
+                    }
+                    break;
+                }
+                
+                curr = nextIndex;
+                this.pageOffsets.push(curr);
+                pIndex++;
+            }
+        }
         
-        const { drawOps, maxScroll } = this.engine.layoutDocument(
-            this.currentBookContent,
-            this.currentFontSize,
-            this.currentWritingMode,
-            cw, ch,
-            this.currentLineHeight,
-            this.currentFontFamily,
-            this.margins
-        );
-        
-        this.drawOps = drawOps;
-        this.maxScroll = maxScroll;
-        this.scrollOffset = Math.max(0, Math.min(targetScroll, maxScroll));
-        
-        this.renderCanvas();
-        this.els.statusBar.classList.remove('hidden');
+        this.currentPageIndex = pIndex;
+        this.showPage(this.currentPageIndex);
     }
 
-    renderCanvas() {
+    showPage(index) {
         if (!this.currentBookContent) return;
-        if (this.scrollOffset < 0) this.scrollOffset = 0;
-        if (this.scrollOffset > this.maxScroll) this.scrollOffset = this.maxScroll;
         
-        const rect = this.els.canvas.getBoundingClientRect();
-        const cw = rect.width;
-        const ch = rect.height;
+        const startIndex = this.pageOffsets[index];
+        if (startIndex === undefined) return;
         
-        this.engine.drawOperations(
-            this.drawOps, 
-            this.scrollOffset, 
-            this.currentFontSize, 
-            this.currentWritingMode, 
-            cw, ch, 
-            this.currentFontFamily
-        );
+        const { nextIndex, drawOps } = this.engine.layoutPage(this.currentBookContent, startIndex, this.currentFontSize, this.currentWritingMode, this.currentLineHeight, this.currentFontFamily);
+        this.engine.drawOperations(drawOps, this.currentFontSize, this.currentWritingMode, this.currentFontFamily);
         
-        const percent = this.maxScroll > 0 ? ((this.scrollOffset / this.maxScroll) * 100).toFixed(3) : 0;
+        if (index === this.pageOffsets.length - 1 && nextIndex < this.currentBookContent.length && nextIndex > startIndex) {
+            this.pageOffsets.push(nextIndex);
+        }
+        
+        const percent = ((startIndex / this.currentBookContent.length) * 100).toFixed(3);
         this.els.pageIndicator.textContent = `${percent}%`;
         this.els.progressSlider.value = percent;
+        
+        this.els.statusBar.classList.remove('hidden');
     }
 
     applyLayoutChange() {
         if (!this.currentBookContent) return;
-        const currentPercent = this.maxScroll > 0 ? this.scrollOffset / this.maxScroll : 0;
-        this.rebuildAndShow(0);
-        this.scrollOffset = this.maxScroll * currentPercent;
-        this.renderCanvas();
+        const currentCharIndex = this.pageOffsets[this.currentPageIndex] || 0;
+        this.rebuildAndShow(currentCharIndex);
         this.saveProgress();
     }
 
@@ -329,12 +314,6 @@ class ZenReaderApp {
         this.applyLayoutChange();
     }
 
-    setMargins(updates) {
-        this.margins = { ...this.margins, ...updates };
-        this.saveState({ margins: this.margins });
-        this.applyLayoutChange();
-    }
-
     setQuad(pos, action) {
         this[`quad${pos}`] = action;
         const stateUpdate = {};
@@ -373,13 +352,6 @@ class ZenReaderApp {
                 }
                 if (state.theme) {
                     this.setTheme(state.theme);
-                }
-                if (state.fontSize) this.setFontSize(state.fontSize);
-                if (state.lineHeight) this.setLineHeight(state.lineHeight);
-                if (state.margins) {
-                    this.setMargins(state.margins);
-                } else if (state.margin !== undefined) {
-                    this.setMargins({ top: state.margin, bottom: state.margin, left: state.margin, right: state.margin });
                 }
                 
                 this.showToast(this.i18n ? this.i18n.t('toastReady') || '設定已同步成功！' : '設定同步成功！');
@@ -428,56 +400,26 @@ class ZenReaderApp {
             else if (x < hw && y >= hh) action = this.quadBL;
             else action = this.quadBR;
 
-            const viewAmt = this.currentWritingMode === 'vertical' 
-                ? (rect.width - this.margins.left - this.margins.right) 
-                : (rect.height - this.margins.top - this.margins.bottom);
-            
-            // Align page flips perfectly to the line-height grid to prevent cutting text in half
-            const gridStep = this.currentFontSize * this.currentLineHeight;
-            const maxVisibleLines = Math.max(1, Math.floor(viewAmt / gridStep));
-            const baseJump = maxVisibleLines * gridStep;
-
             if (action === 'prev') {
-                const target = Math.round((this.scrollOffset - baseJump) / gridStep) * gridStep;
-                this.startInertialScroll(target - this.scrollOffset, 0.4); 
+                if (this.currentPageIndex > 0) {
+                    this.currentPageIndex--;
+                    this.showPage(this.currentPageIndex);
+                    this.saveProgress();
+                }
             } else if (action === 'next') {
-                const target = Math.round((this.scrollOffset + baseJump) / gridStep) * gridStep;
-                this.startInertialScroll(target - this.scrollOffset, 0.4);
+                if (this.currentPageIndex < this.pageOffsets.length - 1 || this.pageOffsets[this.pageOffsets.length - 1] < this.currentBookContent.length) {
+                    this.currentPageIndex++;
+                    this.showPage(this.currentPageIndex);
+                    this.saveProgress();
+                }
             }
         });
-        
-        // Touch Drag & Scroll Wheel
-        this.els.canvas.addEventListener('mousedown', (e) => this.onDragStart(e));
-        this.els.canvas.addEventListener('mousemove', (e) => this.onDragMove(e));
-        window.addEventListener('mouseup', (e) => this.onDragEnd(e));
-        
-        this.els.canvas.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) this.onDragStart(e.touches[0]);
-        }, { passive: true });
-        
-        this.els.canvas.addEventListener('touchmove', (e) => {
-            if (e.touches.length === 1 && this.isDragging) {
-                e.preventDefault(); // Prevents browser scroll
-                this.onDragMove(e.touches[0]);
-            }
-        }, { passive: false });
-        window.addEventListener('touchend', (e) => this.onDragEnd(e));
-
-        this.els.canvas.addEventListener('wheel', (e) => {
-            if (!this.currentBookContent) return;
-            e.preventDefault();
-            this.scrollOffset += this.currentWritingMode === 'vertical' ? -e.deltaX + e.deltaY : e.deltaY;
-            this.renderCanvas(); // instantly renders without inertia
-            // saveProgress omitted from wheel to prevent spamming localStorage, use debounce ideally, or skip for now.
-        }, { passive: false });
 
         window.addEventListener('resize', () => {
             if (!this.currentBookContent) return;
-            const currentPercent = this.maxScroll > 0 ? this.scrollOffset / this.maxScroll : 0;
+            const currentCharIndex = this.pageOffsets[this.currentPageIndex] || 0;
             this.resizeCanvas();
-            this.rebuildAndShow(0);
-            this.scrollOffset = this.maxScroll * currentPercent;
-            this.renderCanvas();
+            this.rebuildAndShow(currentCharIndex);
         });
 
         this.els.progressSlider.addEventListener('input', (e) => {
@@ -487,13 +429,16 @@ class ZenReaderApp {
         this.els.progressSlider.addEventListener('change', (e) => {
             if (!this.currentBookContent) return;
             const percent = parseFloat(e.target.value);
+            let targetChar = Math.floor(this.currentBookContent.length * (percent / 100));
+            
+            if (targetChar < 0) targetChar = 0;
+            if (targetChar >= this.currentBookContent.length) targetChar = this.currentBookContent.length - 1;
             
             this.els.pageIndicator.textContent = "跳轉中...";
             
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                    this.scrollOffset = this.maxScroll * (percent / 100);
-                    this.renderCanvas();
+                    this.rebuildAndShow(targetChar);
                     this.saveProgress();
                 });
             });
@@ -505,15 +450,12 @@ class ZenReaderApp {
             this.els.readerContainer.classList.add('hidden');
             this.els.headerCenter.classList.add('hidden');
             this.els.dropZone.classList.remove('hidden');
-            this.els.statusBar.classList.add('hidden'); 
+            this.els.statusBar.classList.add('hidden'); // Ensure status bar is hidden
             this.els.documentTitle.textContent = '';
             this.currentBookContent = '';
             this.els.fileInput.value = '';
-            
-            this.scrollOffset = 0;
-            this.drawOps = [];
-            this.maxScroll = 0;
-            
+            this.pageOffsets = [0];
+            this.currentPageIndex = 0;
             this.els.ctx.clearRect(0, 0, this.els.canvas.width, this.els.canvas.height); 
             await this.db.deleteBook();
         });
@@ -543,74 +485,6 @@ class ZenReaderApp {
 
         window.addEventListener('online', () => this.showToast('已恢復網路連線'));
         window.addEventListener('offline', () => this.showToast('目前處於離線模式'));
-    }
-
-    onDragStart(e) {
-        if (!this.currentBookContent) return;
-        this.isDragging = true;
-        this.lastDragCoord = this.currentWritingMode === 'vertical' ? e.screenX : e.screenY;
-        this.lastTime = performance.now();
-        this.velocity = 0;
-        if (this.inertiaFrameId) cancelAnimationFrame(this.inertiaFrameId);
-    }
-
-    onDragMove(e) {
-        if (!this.isDragging || !this.currentBookContent) return;
-        const currentCoord = this.currentWritingMode === 'vertical' ? e.screenX : e.screenY;
-        // Invert delta: moving finger Up (negative Y delta) means scrollOffset should increase to view text below
-        const delta = this.currentWritingMode === 'vertical' ? (currentCoord - this.lastDragCoord) : (this.lastDragCoord - currentCoord);
-        
-        const now = performance.now();
-        const dt = Math.max(1, now - this.lastTime);
-        
-        // Rolling velocity track (pixels per frame at 60fps)
-        this.velocity = (delta / dt) * 16.67; 
-        
-        this.lastDragCoord = currentCoord;
-        this.lastTime = now;
-        
-        this.scrollOffset += delta;
-        this.renderCanvas();
-    }
-
-    onDragEnd() {
-        if (!this.isDragging) return;
-        this.isDragging = false;
-        
-        if (Math.abs(this.velocity) > 1) {
-            this.startInertialScroll(this.velocity * 15, 0.92);
-        } else {
-            this.saveProgress();
-        }
-    }
-
-    startInertialScroll(totalDisplacement, friction = 0.95) {
-        if (!this.currentBookContent) return;
-        if (this.inertiaFrameId) cancelAnimationFrame(this.inertiaFrameId);
-        
-        let currentV = totalDisplacement * (1 - friction);
-        
-        const loop = () => {
-            if (Math.abs(currentV) < 0.5) {
-                this.saveProgress();
-                return;
-            }
-            
-            this.scrollOffset += currentV;
-            this.renderCanvas();
-            
-            currentV *= friction;
-            
-            // Hard bumper hit bounding box
-            if (this.scrollOffset < 0 || this.scrollOffset > this.maxScroll) {
-                currentV *= 0.5; // Dampen deeply
-                if (this.scrollOffset < 0) this.scrollOffset = 0;
-                if (this.scrollOffset > this.maxScroll) this.scrollOffset = this.maxScroll;
-            }
-            
-            this.inertiaFrameId = requestAnimationFrame(loop);
-        };
-        loop();
     }
 }
 
