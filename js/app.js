@@ -41,9 +41,19 @@ class ZenReaderApp {
              this.settings = new window.ZenSettings(this);
         }
         
+        // File Explorer module
+        if (window.FileExplorer) {
+             this.explorer = new window.FileExplorer(this);
+        }
+        
         // GDrive module
         if (window.ZenGDrive) {
              this.gdrive = new window.ZenGDrive(this);
+        }
+        
+        // Zip Handler module
+        if (window.ZenZipHandler) {
+             this.zipHandler = new window.ZenZipHandler(this);
         }
 
         this.bindEvents();
@@ -52,7 +62,7 @@ class ZenReaderApp {
 
     initDOM() {
         this.els = {
-            dropZone: document.getElementById('drop-zone'),
+            dropZone: document.getElementById('welcome-screen'), // Treat the whole welcome screen as the dropzone/landing page
             fileInput: document.getElementById('file-input'),
             btnUpload: document.getElementById('btn-upload'),
             btnGDrive: document.getElementById('btn-gdrive'),
@@ -240,6 +250,16 @@ class ZenReaderApp {
 
     async handleFile(file) {
         if (!file) return;
+        
+        if (file.name.toLowerCase().endsWith('.zip')) {
+            if (this.zipHandler) {
+                this.zipHandler.processZip(file, file.name);
+            } else {
+                this.showToast('ZIP 處理模組尚未載入！');
+            }
+            return;
+        }
+
         this.els.dropZone.classList.add('hidden');
         this.els.readerContainer.classList.remove('hidden');
         this.els.headerCenter.classList.remove('hidden');

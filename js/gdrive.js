@@ -5,6 +5,7 @@ class GDriveModule {
         
         this.tokenClient = null;
         this.accessToken = null;
+        this.currentPath = []; // Array of {id, name}
         
         this.initAuth();
     }
@@ -42,7 +43,8 @@ class GDriveModule {
                     throw (tokenResponse);
                 }
                 this.accessToken = tokenResponse.access_token;
-                this.fetchFiles();
+                this.currentPath = [];
+                this.fetchFolder('root');
             },
         });
 
@@ -51,95 +53,76 @@ class GDriveModule {
             this.tokenClient.requestAccessToken({prompt: 'consent'});
         } else {
             // Already logged in
-            this.fetchFiles();
+            this.currentPath = [];
+            this.fetchFolder('root');
         }
     }
 
-    async fetchFiles() {
+    async fetchFolder(folderId) {
         this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveFetching') : 'Fetching...');
         try {
-            const query = encodeURIComponent("mimeType='text/plain' or mimeType='application/zip'");
-            const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType)&pageSize=50`, {
+            // Query for folders, txt, and zip
+            const mimeFilter = "(mimeType='application/vnd.google-apps.folder' or mimeType='text/plain' or mimeType='application/zip')";
+            let query = '';
+            
+            if (folderId === 'virtual_shared') {
+                query = encodeURIComponent(`sharedWithMe = true and trashed = false and ${mimeFilter}`);
+            } else {
+                query = encodeURIComponent(`trashed = false and '${folderId}' in parents and ${mimeFilter}`);
+            }
+
+            const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType)&pageSize=1000&includeItemsFromAllDrives=true&supportsAllDrives=true`, {
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`
                 }
             });
             const data = await response.json();
             
-            if (data.files && data.files.length > 0) {
-                this.showFilePicker(data.files);
-            } else {
-                this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveNoFiles') : 'No files found');
+            let items = (data.files || []).map(f => ({
+                id: f.id,
+                name: f.name,
+                mimeType: f.mimeType,
+                type: f.mimeType === 'application/vnd.google-apps.folder' ? 'folder' : 'file'
+            }));
+
+            // Inject Virtual 'Shared with me' folder if we are at root
+            if (folderId === 'root') {
+                items.unshift({
+                    id: 'virtual_shared',
+                    name: '🤝 與我共用 (Shared with me)',
+                    mimeType: 'application/vnd.google-apps.folder',
+                    type: 'folder'
+                });
             }
+
+            this.app.explorer.show(
+                this.currentPath, 
+                items, 
+                // onSelect (file)
+                (item) => {
+                    this.downloadFile(item.id, item.name, item.mimeType);
+                },
+                // onNavigate (folder)
+                (targetFolderId, pathCutIndex, folderName) => {
+                    if (targetFolderId === 'root') {
+                        this.currentPath = [];
+                        this.fetchFolder('root');
+                    } else if (pathCutIndex !== -1 && pathCutIndex !== undefined) {
+                        // User clicked a breadcrumb
+                        this.currentPath = this.currentPath.slice(0, pathCutIndex);
+                        this.fetchFolder(targetFolderId);
+                    } else {
+                        // User clicked a subfolder
+                        this.currentPath.push({ id: targetFolderId, name: folderName });
+                        this.fetchFolder(targetFolderId);
+                    }
+                }
+            );
+
         } catch (err) {
             console.error('GDrive Fetch Error:', err);
             this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveFetchFail') : 'Fetch failed');
         }
-    }
-
-    showFilePicker(files) {
-        // 先移除已經存在的選擇器
-        const existingPicker = document.getElementById('gdrive-file-picker');
-        if (existingPicker) existingPicker.remove();
-
-        const picker = document.createElement('div');
-        picker.id = 'gdrive-file-picker';
-        
-        // 這裡套用一些 inline css 做簡單的 UI
-        picker.style.cssText = `
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
-            z-index: 2000; display: flex; justify-content: center; align-items: center;
-        `;
-
-        const listContainer = document.createElement('div');
-        listContainer.style.cssText = `
-            background: var(--color-surface); padding: 1.5rem; 
-            border-radius: var(--radius-lg); width: 90%; max-width: 500px;
-            max-height: 80vh; display: flex; flex-direction: column;
-            box-shadow: var(--shadow-md); color: var(--color-text);
-        `;
-
-        const header = document.createElement('h3');
-        header.textContent = this.app.i18n ? this.app.i18n.t('gdrivePickerTitle') : 'Title';
-        header.style.marginBottom = '1rem';
-        listContainer.appendChild(header);
-
-        const listScroll = document.createElement('div');
-        listScroll.style.cssText = 'overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 0.5rem;';
-
-        files.forEach(file => {
-            const btn = document.createElement('button');
-            // 我們可以共用 app 裡面本來就寫好的 btn-secondary 樣式
-            btn.className = 'btn-secondary';
-            btn.style.textAlign = 'left';
-            btn.style.width = '100%';
-            btn.style.whiteSpace = 'nowrap';
-            btn.style.overflow = 'hidden';
-            btn.style.textOverflow = 'ellipsis';
-            
-            // 加入副檔名標示
-            const typeLabel = file.mimeType === 'application/zip' ? '📁 [ZIP]' : '📄 [TXT]';
-            btn.textContent = `${typeLabel} ${file.name}`;
-            
-            btn.onclick = () => {
-                picker.remove();
-                this.downloadFile(file.id, file.name, file.mimeType);
-            };
-            listScroll.appendChild(btn);
-        });
-        
-        listContainer.appendChild(listScroll);
-
-        const closeBtn = document.createElement('button');
-        closeBtn.textContent = this.app.i18n ? this.app.i18n.t('gdriveCancel') : 'Cancel';
-        closeBtn.className = 'btn-primary';
-        closeBtn.style.marginTop = '1.5rem';
-        closeBtn.onclick = () => picker.remove();
-        
-        listContainer.appendChild(closeBtn);
-        picker.appendChild(listContainer);
-        document.body.appendChild(picker);
     }
 
     async downloadFile(fileId, fileName, mimeType) {
@@ -153,7 +136,11 @@ class GDriveModule {
 
             if (mimeType === 'application/zip' || fileName.endsWith('.zip')) {
                 const blob = await response.blob();
-                this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveZipDev') : 'ZIP support coming soon.');
+                if (this.app.zipHandler) {
+                    this.app.zipHandler.processZip(blob, fileName);
+                } else {
+                    this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveZipDev') : 'ZIP support coming soon.');
+                }
             } else {
                 const text = await response.text();
                 await this.app.db.saveBook(fileName, text);

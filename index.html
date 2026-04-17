@@ -31,17 +31,32 @@
 
         <!-- Main Content -->
         <main class="main-content" id="main-content">
-            <div class="drop-zone" id="drop-zone">
-                <div class="upload-icon">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            <!-- Welcome Screen & File Explorer -->
+            <div id="welcome-screen" class="welcome-screen">
+                <div class="welcome-header">
+                    <div class="source-buttons">
+                        <button class="icon-btn" id="btn-upload" data-i18n="title:btnSelectLocal" title="選擇本機檔案">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                        </button>
+                        <button class="icon-btn" id="btn-gdrive" data-i18n="title:btnGDrive" title="由 Google Drive 載入">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22.06 15.81l-3.26-5.63A2 2 0 0 0 17.06 9H6.94a2 2 0 0 0-1.74 1.18L1.94 15.81A2 2 0 0 0 3.67 19h16.66a2 2 0 0 0 1.73-3.19z"></path><path d="M12 3L1.94 15.81"></path><path d="M6.94 9h15.12"></path></svg>
+                        </button>
+                        <span class="source-divider"></span>
+                        <div id="file-explorer-breadcrumbs" class="file-explorer-breadcrumbs">
+                            <span class="breadcrumb-item">Local</span>
+                        </div>
+                    </div>
                 </div>
-                <h2 data-i18n="openTextFile">開啟文字檔</h2>
-                <p data-i18n="dropzoneHint">將檔案拖曳至此，或自雲端載入</p>
-                <div class="btn-group">
-                    <button class="btn-primary" id="btn-upload" data-i18n="btnSelectLocal">選擇本機檔案</button>
-                    <button class="btn-primary btn-gdrive" id="btn-gdrive" data-i18n="btnGDrive">由 Google Drive 載入</button>
+                
+                <div class="welcome-body" id="welcome-zone">
+                    <ul id="file-explorer-list" class="file-explorer-list inline-list">
+                        <li class="empty-drop-hint file-explorer-empty">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5; margin-bottom:1rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            <div data-i18n="dropzoneHint">將檔案拖曳至此，或自左上角雲端載入</div>
+                        </li>
+                    </ul>
                 </div>
-                <input type="file" id="file-input" accept=".txt" hidden>
+                <input type="file" id="file-input" accept=".txt,.zip" hidden>
             </div>
             
             <div class="reader-container hidden" id="reader-container">
@@ -157,10 +172,13 @@
     </dialog>
 
     <!-- JS Engine and logic imports -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="js/db.js"></script>
     <script src="js/i18n.js"></script>
     <script src="js/engine.js"></script>
     <script src="js/settings.js"></script>
+    <script src="js/file-explorer.js"></script>
+    <script src="js/zip-handler.js"></script>
     <script src="js/gdrive.js"></script>
     <script src="js/app.js"></script>
     <script>
