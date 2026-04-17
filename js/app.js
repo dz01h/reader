@@ -417,6 +417,7 @@ class ZenReaderApp {
             this.els.readerContainer.classList.add('hidden');
             this.els.headerCenter.classList.add('hidden');
             this.els.dropZone.classList.remove('hidden');
+            this.els.statusBar.classList.add('hidden'); // Ensure status bar is hidden
             this.els.documentTitle.textContent = '';
             this.currentBookContent = '';
             this.els.fileInput.value = '';
@@ -426,7 +427,12 @@ class ZenReaderApp {
             await this.db.deleteBook();
         });
 
-        this.els.btnUpload.addEventListener('click', () => this.els.fileInput.click());
+        this.els.btnUpload.addEventListener('click', () => {
+            if (this.explorer) {
+                this.explorer.showEmptyDropHint(); // Reset to empty hint state
+            }
+            this.els.fileInput.click();
+        });
         
         if (this.els.btnGDrive && this.gdrive) {
             this.els.btnGDrive.addEventListener('click', () => this.gdrive.handleAuthClick());
