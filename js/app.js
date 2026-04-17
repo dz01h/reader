@@ -15,6 +15,8 @@ class ZenReaderApp {
         this.quadTR = 'next';
         this.quadBL = 'prev';
         this.quadBR = 'next';
+        
+        this.currentGoogleClientId = '';
 
         this.STATE_KEY = 'zen_reader_state';
 
@@ -25,6 +27,10 @@ class ZenReaderApp {
         }
 
         // Initialize internal modules
+        if (window.I18n) {
+            this.i18n = new window.I18n();
+        }
+        
         this.db = new window.ZenDB();
         
         this.initDOM();
@@ -33,6 +39,11 @@ class ZenReaderApp {
         // Settings Dialog module
         if (window.ZenSettings) {
              this.settings = new window.ZenSettings(this);
+        }
+        
+        // GDrive module
+        if (window.ZenGDrive) {
+             this.gdrive = new window.ZenGDrive(this);
         }
 
         this.bindEvents();
@@ -44,6 +55,7 @@ class ZenReaderApp {
             dropZone: document.getElementById('drop-zone'),
             fileInput: document.getElementById('file-input'),
             btnUpload: document.getElementById('btn-upload'),
+            btnGDrive: document.getElementById('btn-gdrive'),
             readerContainer: document.getElementById('reader-container'),
             documentTitle: document.getElementById('document-title'),
             canvas: document.getElementById('reader-canvas'),
@@ -90,6 +102,15 @@ class ZenReaderApp {
                 if (state.quadTR) this.quadTR = state.quadTR;
                 if (state.quadBL) this.quadBL = state.quadBL;
                 if (state.quadBR) this.quadBR = state.quadBR;
+                
+                if (state.googleClientId) this.currentGoogleClientId = state.googleClientId;
+                
+                if (state.lang && this.i18n) {
+                    this.i18n.setLanguage(state.lang);
+                } else if (this.i18n) {
+                    this.i18n.updateDOM();
+                }
+
             } catch (e) {
                 console.error("Local storage error:", e);
             }
@@ -278,6 +299,22 @@ class ZenReaderApp {
         stateUpdate[`quad${pos}`] = action;
         this.saveState(stateUpdate);
     }
+    
+    setGoogleClientId(id) {
+        this.currentGoogleClientId = id;
+        this.saveState({ googleClientId: id });
+    }
+
+    setLanguage(langCode) {
+        if (this.i18n && this.i18n.setLanguage(langCode)) {
+            this.saveState({ lang: langCode });
+            
+            const fontSizeDisplay = document.getElementById('setting-font-size-display');
+            if (fontSizeDisplay) fontSizeDisplay.textContent = this.currentFontSize + 'px';
+            const lineHeightDisplay = document.getElementById('setting-line-height-display');
+            if (lineHeightDisplay) lineHeightDisplay.textContent = this.currentLineHeight;
+        }
+    }
 
     bindEvents() {
         // Canvas Quadrant Tap Navigation
@@ -371,6 +408,10 @@ class ZenReaderApp {
 
         this.els.btnUpload.addEventListener('click', () => this.els.fileInput.click());
         
+        if (this.els.btnGDrive && this.gdrive) {
+            this.els.btnGDrive.addEventListener('click', () => this.gdrive.handleAuthClick());
+        }
+
         this.els.fileInput.addEventListener('change', (e) => {
             if (e.target.files.length) this.handleFile(e.target.files[0]);
         });

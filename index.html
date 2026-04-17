@@ -13,17 +13,17 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <div class="logo">Zen Reader</div>
+            <div class="logo" data-i18n="appTitle">Zen Reader</div>
             
             <div class="header-center hidden" id="header-center">
                 <span class="document-title-header" id="document-title"></span>
-                <button id="btn-close-reader" class="btn-close-header" title="關閉檔案">
+                <button id="btn-close-reader" class="btn-close-header" data-i18n="title:closeFile" title="關閉檔案">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
             </div>
 
             <div class="controls">
-                <button id="btn-open-settings" title="開啟設定">
+                <button id="btn-open-settings" data-i18n="title:openSettings" title="開啟設定">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </button>
             </div>
@@ -35,9 +35,12 @@
                 <div class="upload-icon">
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 </div>
-                <h2>開啟文字檔</h2>
-                <p>將檔案拖曳至此，或點擊選擇檔案</p>
-                <button class="btn-primary" id="btn-upload">選擇檔案</button>
+                <h2 data-i18n="openTextFile">開啟文字檔</h2>
+                <p data-i18n="dropzoneHint">將檔案拖曳至此，或自雲端載入</p>
+                <div class="btn-group">
+                    <button class="btn-primary" id="btn-upload" data-i18n="btnSelectLocal">選擇本機檔案</button>
+                    <button class="btn-primary btn-gdrive" id="btn-gdrive" data-i18n="btnGDrive">由 Google Drive 載入</button>
+                </div>
                 <input type="file" id="file-input" accept=".txt" hidden>
             </div>
             
@@ -48,96 +51,117 @@
 
         <footer class="status-bar hidden" id="status-bar">
             <div class="progress-container">
-                <input type="range" id="progress-slider" min="0" max="100" step="0.001" value="0" title="拖動調整閱讀進度">
+                <input type="range" id="progress-slider" min="0" max="100" step="0.001" value="0" data-i18n="title:progressTitle" title="拖動調整閱讀進度">
                 <span id="page-indicator">0.000%</span>
             </div>
         </footer>
         
-        <div id="toast" class="toast">離線模式已就緒</div>
+        <div id="toast" class="toast" data-i18n="toastReady">離線模式已就緒</div>
     </div>
     
     <dialog id="settings-dialog" class="settings-dialog">
         <div class="dialog-header">
-            <h2>閱讀設定</h2>
+            <h2 data-i18n="settingsTitle">閱讀設定</h2>
             <button id="btn-close-settings" class="btn-close">&times;</button>
         </div>
         <div class="dialog-body">
             <div class="setting-group">
-                <label for="setting-theme">主題色彩</label>
+                <label for="setting-lang" data-i18n="settingLanguage">介面語言</label>
+                <select id="setting-lang">
+                    <option value="zh-TW">繁體中文 (Taiwan)</option>
+                    <option value="zh-CN">简体中文 (China)</option>
+                    <option value="en-US">English (US)</option>
+                    <option value="ja-JP">日本語 (Japan)</option>
+                </select>
+            </div>
+            <div class="setting-group">
+                <label for="setting-theme" data-i18n="settingTheme">主題色彩</label>
                 <select id="setting-theme">
-                    <option value="light">淺色風格</option>
-                    <option value="dark">深色風格</option>
+                    <option value="light" data-i18n="themeLight">淺色風格</option>
+                    <option value="dark" data-i18n="themeDark">深色風格</option>
                 </select>
             </div>
             <div class="setting-group">
-                <label for="setting-direction">閱讀方向</label>
+                <label for="setting-direction" data-i18n="settingDirection">閱讀方向</label>
                 <select id="setting-direction">
-                    <option value="horizontal">橫書</option>
-                    <option value="vertical">直書</option>
+                    <option value="horizontal" data-i18n="dirHorizontal">橫書</option>
+                    <option value="vertical" data-i18n="dirVertical">直書</option>
                 </select>
             </div>
             <div class="setting-group">
-                <label for="setting-font-family">字體風格</label>
+                <label for="setting-font-family" data-i18n="settingFontFamily">字體風格</label>
                 <select id="setting-font-family">
-                    <option value="sans-serif">無襯線體 (預設黑體)</option>
-                    <option value="serif">襯線體 (明體/宋體)</option>
-                    <option value="monospace">等寬字體</option>
+                    <option value="sans-serif" data-i18n="fontSans">無襯線體 (預設黑體)</option>
+                    <option value="serif" data-i18n="fontSerif">襯線體 (明體/宋體)</option>
+                    <option value="monospace" data-i18n="fontMono">等寬字體</option>
                 </select>
             </div>
             <div class="setting-group">
-                <label for="setting-font-size">字體大小: <span id="setting-font-size-display">18px</span></label>
+                <label><span data-i18n="settingFontSize">字體大小: </span><span id="setting-font-size-display">18px</span></label>
                 <input type="range" id="setting-font-size" min="12" max="48" step="2" value="18">
             </div>
             <div class="setting-group">
-                <label for="setting-line-height">行距: <span id="setting-line-height-display">1.8</span></label>
+                <label><span data-i18n="settingLineHeight">行距: </span><span id="setting-line-height-display">1.8</span></label>
                 <input type="range" id="setting-line-height" min="1.0" max="3.0" step="0.1" value="1.8">
             </div>
 
             <fieldset class="setting-fieldset">
-                <legend>點擊四象限 (隱形換頁按鈕)</legend>
+                <legend data-i18n="settingQuadrants">點擊四象限 (隱形換頁按鈕)</legend>
                 <div class="setting-group-row">
                     <div class="setting-group half">
-                        <label for="setting-quad-tl">左上角</label>
+                        <label for="setting-quad-tl" data-i18n="quadTL">左上角</label>
                         <select id="setting-quad-tl">
-                            <option value="prev">上一頁</option>
-                            <option value="next">下一頁</option>
-                            <option value="none">無功能</option>
+                            <option value="prev" data-i18n="actionPrev">上一頁</option>
+                            <option value="next" data-i18n="actionNext">下一頁</option>
+                            <option value="none" data-i18n="actionNone">無功能</option>
                         </select>
                     </div>
                     <div class="setting-group half">
-                        <label for="setting-quad-tr">右上角</label>
+                        <label for="setting-quad-tr" data-i18n="quadTR">右上角</label>
                         <select id="setting-quad-tr">
-                            <option value="prev">上一頁</option>
-                            <option value="next">下一頁</option>
-                            <option value="none">無功能</option>
+                            <option value="prev" data-i18n="actionPrev">上一頁</option>
+                            <option value="next" data-i18n="actionNext">下一頁</option>
+                            <option value="none" data-i18n="actionNone">無功能</option>
                         </select>
                     </div>
                 </div>
                 <div class="setting-group-row">
                     <div class="setting-group half">
-                        <label for="setting-quad-bl">左下角</label>
+                        <label for="setting-quad-bl" data-i18n="quadBL">左下角</label>
                         <select id="setting-quad-bl">
-                            <option value="prev">上一頁</option>
-                            <option value="next">下一頁</option>
-                            <option value="none">無功能</option>
+                            <option value="prev" data-i18n="actionPrev">上一頁</option>
+                            <option value="next" data-i18n="actionNext">下一頁</option>
+                            <option value="none" data-i18n="actionNone">無功能</option>
                         </select>
                     </div>
                     <div class="setting-group half">
-                        <label for="setting-quad-br">右下角</label>
+                        <label for="setting-quad-br" data-i18n="quadBR">右下角</label>
                         <select id="setting-quad-br">
-                            <option value="prev">上一頁</option>
-                            <option value="next">下一頁</option>
-                            <option value="none">無功能</option>
+                            <option value="prev" data-i18n="actionPrev">上一頁</option>
+                            <option value="next" data-i18n="actionNext">下一頁</option>
+                            <option value="none" data-i18n="actionNone">無功能</option>
                         </select>
                     </div>
+                </div>
+            </fieldset>
+
+            <fieldset class="setting-fieldset">
+                <legend data-i18n="settingAdvanced">進階整合</legend>
+                <div class="setting-group">
+                    <label for="setting-google-client-id" data-i18n="settingGoogleClientId">Google Client ID</label>
+                    <input type="text" id="setting-google-client-id" data-i18n="placeholder:googleIdPlaceholder" placeholder="xxxxx.apps.googleusercontent.com">
+                    <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.25rem;" data-i18n="googleIdHint">填寫您專屬的用戶端 ID 以存取私人 Google Drive</p>
                 </div>
             </fieldset>
         </div>
     </dialog>
 
+    <!-- JS Engine and logic imports -->
     <script src="js/db.js"></script>
+    <script src="js/i18n.js"></script>
     <script src="js/engine.js"></script>
     <script src="js/settings.js"></script>
+    <script src="js/gdrive.js"></script>
     <script src="js/app.js"></script>
     <script>
         if ('serviceWorker' in navigator) {

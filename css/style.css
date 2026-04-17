@@ -167,17 +167,18 @@ body {
 }
 
 .setting-group select,
-.setting-group input[type="range"] {
+.setting-group input[type="range"],
+.setting-group input[type="text"] {
     width: 100%;
 }
 
-select {
+select, input[type="text"] {
     padding: 0.5rem;
     border-radius: var(--radius-md);
     border: 1px solid var(--color-border);
     background-color: var(--color-bg);
     color: var(--color-text);
-    font-size: 1rem;
+    font-size: 0.95rem;
     outline: none;
 }
 
@@ -280,6 +281,22 @@ select {
     transform: translateY(-2px);
     box-shadow: var(--shadow-md);
     color: white;
+}
+
+.btn-group {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.btn-gdrive {
+    background-color: #4285F4;
+}
+
+.btn-gdrive:hover {
+    background-color: #3367D6;
 }
 
 /* Reader */

@@ -22,6 +22,8 @@ class ZenSettings {
         this.quadTRSelect = document.getElementById('setting-quad-tr');
         this.quadBLSelect = document.getElementById('setting-quad-bl');
         this.quadBRSelect = document.getElementById('setting-quad-br');
+        this.googleClientIdInput = document.getElementById('setting-google-client-id');
+        this.langSelect = document.getElementById('setting-lang');
     }
 
     syncUI() {
@@ -37,6 +39,11 @@ class ZenSettings {
         this.quadTRSelect.value = this.app.quadTR;
         this.quadBLSelect.value = this.app.quadBL;
         this.quadBRSelect.value = this.app.quadBR;
+        
+        this.googleClientIdInput.value = this.app.currentGoogleClientId || '';
+        if (this.app.i18n && this.langSelect) {
+            this.langSelect.value = this.app.i18n.lang;
+        }
     }
 
     bindEvents() {
@@ -85,6 +92,12 @@ class ZenSettings {
         this.quadTRSelect.addEventListener('change', (e) => this.app.setQuad('TR', e.target.value));
         this.quadBLSelect.addEventListener('change', (e) => this.app.setQuad('BL', e.target.value));
         this.quadBRSelect.addEventListener('change', (e) => this.app.setQuad('BR', e.target.value));
+        
+        this.googleClientIdInput.addEventListener('change', (e) => this.app.setGoogleClientId(e.target.value.trim()));
+        
+        if (this.langSelect) {
+            this.langSelect.addEventListener('change', (e) => this.app.setLanguage(e.target.value));
+        }
     }
 }
 
