@@ -47,23 +47,25 @@ self.addEventListener('fetch', event => {
   // 避免攔截特殊協議 (chrome-extension:// 等) 或 Google API
   if (!event.request.url.startsWith('http') || event.request.url.includes('googleapis.com')) return;
 
-  // Network First, fallback to cache 策略：
-  // 永遠優先向伺服器拿最新代碼，方便開發更新；斷網時才拿快取
+  // Stale-While-Revalidate (SWR) 策略：
+  // 優先從快取拿資料（回應最快），同時在背景向伺服器更新快取內容
   event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        // 若伺服器回應正常，則順便把最新版存進快取
-        if (response && response.status === 200) {
-          const responseToCache = response.clone();
+    caches.match(event.request).then(cachedResponse => {
+      const fetchPromise = fetch(event.request).then(networkResponse => {
+        // 若伺服器回應正常，則更新快取
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then(cache => {
             cache.put(event.request, responseToCache);
           });
         }
-        return response;
-      })
-      .catch(() => {
-        // 斷網或伺服器連不上，從快取中提取
-        return caches.match(event.request);
-      })
+        return networkResponse;
+      }).catch(err => {
+        console.log('Background fetch failed:', err);
+      });
+
+      // 如果有快取，立即回傳；否則等待網路請求
+      return cachedResponse || fetchPromise;
+    })
   );
 });

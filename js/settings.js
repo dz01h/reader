@@ -161,6 +161,29 @@ class ZenSettings {
         if (this.btnSyncQr) {
             this.btnSyncQr.addEventListener('click', (e) => this.generateSyncQR(e));
         }
+
+        // Transparency during slider interaction
+        const startInteracting = e => {
+            if(!e.target.matches('input[type="range"]')) return;
+            this.dialog.classList.add('interacting');
+            doInteracting(e);
+        };
+        let interactingTimer = null;
+        const doInteracting = e => {
+            if(!e.target.matches('input[type="range"]')) return;
+            if(interactingTimer) clearTimeout(interactingTimer);
+            interactingTimer = setTimeout(() => {
+                this.dialog.classList.remove('interacting');
+            }, 3000);
+        }
+        const stopInteracting = () => this.dialog.classList.remove('interacting');
+
+        this.dialog.addEventListener('mousedown', startInteracting);
+        this.dialog.addEventListener('touchstart', startInteracting, { passive: true });
+        this.dialog.addEventListener('mousemove', doInteracting);
+        this.dialog.addEventListener('touchmove', doInteracting, { passive: true });
+        window.addEventListener('mouseup', stopInteracting);
+        window.addEventListener('touchend', stopInteracting);
     }
 
     generateSyncQR(e) {

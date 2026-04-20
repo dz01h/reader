@@ -119,8 +119,9 @@ body {
     transition: opacity 0.2s ease;
 }
 
-.settings-dialog.dragging {
-    opacity: 0.25;
+.settings-dialog.dragging,
+.settings-dialog.interacting {
+    opacity: 0.3;
 }
 
 .settings-dialog::backdrop {
@@ -129,7 +130,8 @@ body {
     transition: backdrop-filter 0.2s ease, background 0.2s ease;
 }
 
-.settings-dialog.dragging::backdrop {
+.settings-dialog.dragging::backdrop,
+.settings-dialog.interacting::backdrop {
     background: rgba(0, 0, 0, 0.1);
     backdrop-filter: none;
 }
