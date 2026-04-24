@@ -28,7 +28,6 @@ class ZenReaderApp {
         this.quadBL = 'prev';
         this.quadBR = 'next';
         
-        this.currentGoogleClientId = '';
 
         this.STATE_KEY = 'zen_reader_state';
 
@@ -131,7 +130,6 @@ class ZenReaderApp {
                 if (state.quadBL) this.quadBL = state.quadBL;
                 if (state.quadBR) this.quadBR = state.quadBR;
                 
-                if (state.googleClientId) this.currentGoogleClientId = state.googleClientId;
                 
                 if (state.lang && this.i18n) {
                     this.i18n.setLanguage(state.lang);
@@ -283,11 +281,12 @@ class ZenReaderApp {
         
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const content = e.target.result;
-            await this.db.saveBook(file.name, content);
-            this.loadBookIntoReader(file.name, content);
+            const buffer = e.target.result;
+            const text = this.decodeText(new Uint8Array(buffer));
+            await this.db.saveBook(file.name, text);
+            this.loadBookIntoReader(file.name, text);
         };
-        reader.readAsText(file);
+        reader.readAsArrayBuffer(file);
     }
 
     showToast(msg) {
@@ -295,6 +294,47 @@ class ZenReaderApp {
         toast.textContent = msg;
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    decodeText(uint8array) {
+        // Check for BOMs (Byte Order Marks)
+        if (uint8array.length >= 2) {
+            // UTF-16 LE
+            if (uint8array[0] === 0xFF && uint8array[1] === 0xFE) {
+                return new TextDecoder('utf-16le').decode(uint8array);
+            }
+            // UTF-16 BE
+            if (uint8array[0] === 0xFE && uint8array[1] === 0xFF) {
+                return new TextDecoder('utf-16be').decode(uint8array);
+            }
+        }
+        if (uint8array.length >= 3) {
+            // UTF-8 BOM
+            if (uint8array[0] === 0xEF && uint8array[1] === 0xBB && uint8array[2] === 0xBF) {
+                return new TextDecoder('utf-8').decode(uint8array);
+            }
+        }
+
+        try {
+            // 1. Try decoding strictly as UTF-8
+            return new TextDecoder('utf-8', { fatal: true }).decode(uint8array);
+        } catch (e) {
+            // 2. Fallback based on interface language preference
+            let fallbackEnc = 'big5';
+            if (this.i18n) {
+                if (this.i18n.lang === 'zh-CN') fallbackEnc = 'gbk';
+                else if (this.i18n.lang === 'ja-JP') fallbackEnc = 'shift-jis';
+                else if (this.i18n.lang === 'en-US') fallbackEnc = 'windows-1252';
+            }
+            
+            console.warn(`UTF-8 decoding failed, falling back to ${fallbackEnc} ...`);
+            try {
+                return new TextDecoder(fallbackEnc, { fatal: true }).decode(uint8array);
+            } catch(e2) {
+                // 3. Last resort ignoring invalid characters
+                return new TextDecoder(fallbackEnc).decode(uint8array);
+            }
+        }
     }
 
     // Public Setters for Options Dialog
@@ -342,10 +382,6 @@ class ZenReaderApp {
         this.saveState(stateUpdate);
     }
     
-    setGoogleClientId(id) {
-        this.currentGoogleClientId = id;
-        this.saveState({ googleClientId: id });
-    }
 
     setLanguage(langCode) {
         if (this.i18n && this.i18n.setLanguage(langCode)) {
@@ -365,9 +401,6 @@ class ZenReaderApp {
             try {
                 const state = JSON.parse(atob(syncPayload));
                 
-                if (state.clientId) {
-                    this.setGoogleClientId(state.clientId);
-                }
                 if (state.lang) {
                     this.setLanguage(state.lang);
                 }

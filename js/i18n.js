@@ -35,12 +35,8 @@ const translations = {
         actionNone: '無功能',
         
         settingAdvanced: '進階整合',
-        settingGoogleClientId: 'Google Client ID',
-        googleIdHint: '填寫您專屬的用戶端 ID 以存取私人 Google Drive',
-        googleIdPlaceholder: 'xxxxx.apps.googleusercontent.com',
-
-        gdriveLoading: 'Google API 仍在載入中，請稍候...',
-        gdriveMissingId: '無法登入：請先至左上角 [設定] 填寫您的 Google Client ID！',
+        btnSyncQr: '產生同步 QR Code',
+        gdriveFetchingToken: '正在取得 Google 授權令牌...',
         gdriveLoginFail: 'Google 登入或授權失敗！',
         gdriveFetching: '正在讀取 Google Drive 檔案清單...',
         gdriveNoFiles: '在您的 GDrive 中找不到任何 .txt 或 .zip 檔案！',
@@ -87,12 +83,8 @@ const translations = {
         actionNone: '无功能',
         
         settingAdvanced: '进阶整合',
-        settingGoogleClientId: 'Google Client ID',
-        googleIdHint: '填写您专属的客户端 ID 以存取私人 Google Drive',
-        googleIdPlaceholder: 'xxxxx.apps.googleusercontent.com',
-
-        gdriveLoading: 'Google API 仍在载入中，请稍候...',
-        gdriveMissingId: '无法登录：请先至左上角 [设置] 填写您的 Google Client ID！',
+        btnSyncQr: '产生同步 QR Code',
+        gdriveFetchingToken: '正在取得 Google 授权令牌...',
         gdriveLoginFail: 'Google 登录或授权失败！',
         gdriveFetching: '正在读取 Google Drive 文件列表...',
         gdriveNoFiles: '在您的 GDrive 中找不到任何 .txt 或 .zip 文件！',
@@ -139,12 +131,8 @@ const translations = {
         actionNone: 'None',
         
         settingAdvanced: 'Advanced Integrations',
-        settingGoogleClientId: 'Google Client ID',
-        googleIdHint: 'Enter your personal Client ID to access Google Drive',
-        googleIdPlaceholder: 'xxxxx.apps.googleusercontent.com',
-
-        gdriveLoading: 'Google API is loading, please wait...',
-        gdriveMissingId: 'Login failed: Please set your Google Client ID in settings first!',
+        btnSyncQr: 'Generate Sync QR Code',
+        gdriveFetchingToken: 'Fetching Google access token...',
         gdriveLoginFail: 'Google Login or Authorization failed!',
         gdriveFetching: 'Fetching Google Drive file list...',
         gdriveNoFiles: 'No .txt or .zip files found in your GDrive!',
@@ -191,12 +179,8 @@ const translations = {
         actionNone: 'なし',
         
         settingAdvanced: '高度な統合',
-        settingGoogleClientId: 'Google Client ID',
-        googleIdHint: 'Google Drive にアクセスするためのクライアントIDを入力',
-        googleIdPlaceholder: 'xxxxx.apps.googleusercontent.com',
-
-        gdriveLoading: 'Google API を読み込み中...',
-        gdriveMissingId: 'ログイン失敗: 先に設定で Google Client ID を入力してください！',
+        btnSyncQr: '同期用 QR コードを作成',
+        gdriveFetchingToken: 'Google アクセストークンを取得中...',
         gdriveLoginFail: 'Google ログイン または 認証に失敗しました！',
         gdriveFetching: 'Google Drive ファイルリストを取得中...',
         gdriveNoFiles: 'GDrive に .txt または .zip ファイルが見つかりません！',

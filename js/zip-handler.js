@@ -58,7 +58,7 @@ class ZipHandler {
         this.app.showToast(`正在解壓縮 ${fileName}...`);
         try {
             const uint8array = await zipEntry.async("uint8array");
-            const text = this.decodeText(uint8array);
+            const text = this.app.decodeText(uint8array);
             
             const finalName = `[${zipName}] ${fileName}`;
             await this.app.db.saveBook(finalName, text);
@@ -69,24 +69,6 @@ class ZipHandler {
         }
     }
 
-    decodeText(uint8array) {
-        // Robust Chinese text encoding detection heuristic
-        try {
-            // 1. Try decoding strictly as UTF-8
-            return new TextDecoder('utf-8', { fatal: true }).decode(uint8array);
-        } catch (e) {
-            // 2. Fallback based on interface language preference
-            const isSimplified = this.app.i18n && this.app.i18n.lang === 'zh-CN';
-            const fallbackEnc = isSimplified ? 'gbk' : 'big5';
-            console.warn(`UTF-8 extraction failed, falling back to ${fallbackEnc} ...`);
-            try {
-                return new TextDecoder(fallbackEnc, { fatal: true }).decode(uint8array);
-            } catch(e2) {
-                // 3. Last resort ignoring invalid characters
-                return new TextDecoder(fallbackEnc).decode(uint8array);
-            }
-        }
-    }
 }
 
 window.ZenZipHandler = ZipHandler;

@@ -79,7 +79,7 @@
                 <span id="page-indicator">0.000%</span>
             </div>
         </footer>
-        
+
         <div id="toast" class="toast" data-i18n="toastReady">離線模式已就緒</div>
     </div>
     
@@ -191,12 +191,7 @@
             <fieldset class="setting-fieldset">
                 <legend data-i18n="settingAdvanced">進階整合</legend>
                 <div class="setting-group">
-                    <label for="setting-google-client-id" data-i18n="settingGoogleClientId">Google Client ID</label>
-                    <div style="display:flex; gap: 0.5rem; align-items: stretch;">
-                        <input type="text" id="setting-google-client-id" style="flex:1" data-i18n="placeholder:googleIdPlaceholder" placeholder="xxxxx.apps.googleusercontent.com">
-                        <button id="btn-sync-qr" class="btn-primary" style="padding:0 0.75rem" title="產生同步 QR Code">📱</button>
-                    </div>
-                    <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.25rem;" data-i18n="googleIdHint">填寫您專屬的用戶端 ID 以存取私人 Google Drive</p>
+                    <button id="btn-sync-qr" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnSyncQr">產生同步 QR Code</button>
                 </div>
                 
                 <div id="qr-container" class="hidden" style="margin-top: 1rem; text-align: center; background: white; padding: 1rem; border-radius: 8px;">

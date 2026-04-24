@@ -30,7 +30,6 @@ class ZenSettings {
         this.quadTRSelect = document.getElementById('setting-quad-tr');
         this.quadBLSelect = document.getElementById('setting-quad-bl');
         this.quadBRSelect = document.getElementById('setting-quad-br');
-        this.googleClientIdInput = document.getElementById('setting-google-client-id');
         this.langSelect = document.getElementById('setting-lang');
         
         this.btnSyncQr = document.getElementById('btn-sync-qr');
@@ -70,7 +69,6 @@ class ZenSettings {
         this.quadBLSelect.value = this.app.quadBL;
         this.quadBRSelect.value = this.app.quadBR;
         
-        this.googleClientIdInput.value = this.app.currentGoogleClientId || '';
         if (this.app.i18n && this.langSelect) {
             this.langSelect.value = this.app.i18n.lang;
         }
@@ -152,7 +150,6 @@ class ZenSettings {
         this.quadBLSelect.addEventListener('change', (e) => this.app.setQuad('BL', e.target.value));
         this.quadBRSelect.addEventListener('change', (e) => this.app.setQuad('BR', e.target.value));
         
-        this.googleClientIdInput.addEventListener('change', (e) => this.app.setGoogleClientId(e.target.value.trim()));
         
         if (this.langSelect) {
             this.langSelect.addEventListener('change', (e) => this.app.setLanguage(e.target.value));
@@ -190,18 +187,9 @@ class ZenSettings {
         e.preventDefault();
         
         if (this.qrContainer.classList.contains('hidden')) {
-            // Check if user has entered anything useful
-            if (!this.app.currentGoogleClientId) {
-                this.app.showToast(this.app.i18n ? this.app.i18n.t('errorNoClientId') || '請先輸入 Client ID 再產生同步碼' : '請先輸入 Client ID');
-                return;
-            }
-
-            this.qrContainer.classList.remove('hidden');
-            this.qrCodeEl.innerHTML = '';
-            
-            // Serialize settings
+            this.qrContainer.classList.remove("hidden");
+            this.qrCodeEl.innerHTML = "";
             const state = {
-                clientId: this.app.currentGoogleClientId,
                 lang: this.app.i18n ? this.app.i18n.lang : 'en',
                 theme: document.documentElement.getAttribute('data-theme'),
                 fontSize: this.app.currentFontSize,
