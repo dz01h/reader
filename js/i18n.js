@@ -1,6 +1,7 @@
 const translations = {
     'zh-TW': {
         appTitle: 'Zen Reader',
+        confirmExit: '確定要離開 Zen Reader 嗎？',
         closeFile: '關閉檔案',
         openSettings: '開啟設定',
         openTextFile: '開啟文字檔',
@@ -51,6 +52,7 @@ const translations = {
     },
     'zh-CN': {
         appTitle: 'Zen Reader',
+        confirmExit: '确定要离开 Zen Reader 吗？',
         closeFile: '关闭文件',
         openSettings: '打开设置',
         openTextFile: '打开文本文件',
@@ -101,6 +103,7 @@ const translations = {
     },
     'en-US': {
         appTitle: 'Zen Reader',
+        confirmExit: 'Are you sure you want to exit Zen Reader?',
         closeFile: 'Close File',
         openSettings: 'Settings',
         openTextFile: 'Open Document',
@@ -151,7 +154,8 @@ const translations = {
     },
     'ja-JP': {
         appTitle: 'Zen Reader',
-        closeFile: '閉じる',
+        confirmExit: 'Zen Reader を終了してもよろしいですか？',
+        closeFile: 'ファイルを閉じる',
         openSettings: '設定',
         openTextFile: 'ファイルを開く',
         dropzoneHint: 'ここにファイルをドロップ、またはクラウドから読み込む',

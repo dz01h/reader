@@ -158,6 +158,25 @@ class ZenReaderApp {
         }
     }
 
+    async closeReader() {
+        document.body.classList.remove('reading-mode');
+        document.body.classList.remove('ui-hidden');
+        this.els.readerContainer.classList.add('hidden');
+        this.els.headerCenter.classList.add('hidden');
+        this.els.dropZone.classList.remove('hidden');
+        this.els.statusBar.classList.add('hidden'); 
+        this.els.documentTitle.textContent = '';
+        this.currentBookContent = '';
+        this.els.fileInput.value = '';
+        
+        this.scrollOffset = 0;
+        this.drawOps = [];
+        this.maxScroll = 0;
+        
+        this.els.ctx.clearRect(0, 0, this.els.canvas.width, this.els.canvas.height); 
+        await this.db.deleteBook();
+    }
+
     resizeCanvas() {
         this.els.canvas.style.width = '100%'; 
         this.els.canvas.style.height = '100%'; 
@@ -598,24 +617,7 @@ class ZenReaderApp {
             });
         });
 
-        this.els.btnCloseReader.addEventListener('click', async () => {
-            document.body.classList.remove('reading-mode');
-            document.body.classList.remove('ui-hidden');
-            this.els.readerContainer.classList.add('hidden');
-            this.els.headerCenter.classList.add('hidden');
-            this.els.dropZone.classList.remove('hidden');
-            this.els.statusBar.classList.add('hidden'); 
-            this.els.documentTitle.textContent = '';
-            this.currentBookContent = '';
-            this.els.fileInput.value = '';
-            
-            this.scrollOffset = 0;
-            this.drawOps = [];
-            this.maxScroll = 0;
-            
-            this.els.ctx.clearRect(0, 0, this.els.canvas.width, this.els.canvas.height); 
-            await this.db.deleteBook();
-        });
+        this.els.btnCloseReader.addEventListener('click', () => this.closeReader());
 
         this.els.btnUpload.addEventListener('click', () => {
             if (this.explorer) {

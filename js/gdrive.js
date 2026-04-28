@@ -18,6 +18,18 @@ class GDriveModule {
         }
 
         window.addEventListener('message', this.handleAuthMessage.bind(this));
+        window.addEventListener('popstate', this.handlePopState.bind(this));
+    }
+
+    handlePopState(event) {
+        if (event.state && event.state.gdrive) {
+            this.currentPath = event.state.path || [];
+            this.fetchFolder(event.state.folderId, true);
+        } else if (this.currentPath && this.currentPath.length > 0) {
+            // Popped to a non-gdrive state, reset to root if we were deep in folders
+            this.currentPath = [];
+            this.fetchFolder('root', true);
+        }
     }
 
     handleAuthMessage(event) {
@@ -121,7 +133,16 @@ class GDriveModule {
         }
     }
 
-    async fetchFolder(folderId) {
+    async fetchFolder(folderId, skipPushState = false) {
+        if (!skipPushState) {
+            const stateObj = {
+                gdrive: true,
+                folderId: folderId,
+                path: JSON.parse(JSON.stringify(this.currentPath))
+            };
+            history.pushState(stateObj, '', '');
+        }
+
         this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveFetching') : 'Fetching...');
         try {
             // Query for folders, txt, and zip
