@@ -3,7 +3,7 @@
   "short_name": "Zen Reader",
   "description": "A beautiful offline text reader",
   "start_url": "./index.html",
-  "display": "standalone",
+  "display": "fullscreen",
   "background_color": "#0f172a",
   "theme_color": "#818cf8",
   "icons": [
