@@ -46,6 +46,9 @@ body {
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
 }
 
 .app-container {
@@ -185,6 +188,10 @@ body {
     width: 100%;
 }
 
+.setting-group input[type="range"] {
+    touch-action: none;
+}
+
 select, input[type="text"] {
     padding: 0.5rem;
     border-radius: var(--radius-md);
@@ -193,6 +200,8 @@ select, input[type="text"] {
     color: var(--color-text);
     font-size: 0.95rem;
     outline: none;
+    -webkit-user-select: auto;
+    user-select: auto;
 }
 
 .setting-fieldset {
@@ -408,6 +417,7 @@ select, input[type="text"] {
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
 }
 
 /* Status Bar */
@@ -442,6 +452,7 @@ select, input[type="text"] {
     max-width: none;
     cursor: pointer;
     accent-color: var(--color-primary);
+    touch-action: none;
 }
 
 [data-writing-mode="vertical"] #progress-slider {

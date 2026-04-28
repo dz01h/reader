@@ -22,6 +22,9 @@ class GDriveModule {
     }
 
     handlePopState(event) {
+        if (this.app.explorer) {
+            this.app.explorer.saveScrollState();
+        }
         if (event.state && event.state.gdrive) {
             this.currentPath = event.state.path || [];
             this.fetchFolder(event.state.folderId, true);

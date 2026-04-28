@@ -7,6 +7,13 @@ class FileExplorer {
         
         this.listEl = document.getElementById('file-explorer-list');
         this.breadcrumbsEl = document.getElementById('file-explorer-breadcrumbs');
+        this.scrollCache = {};
+    }
+
+    saveScrollState() {
+        const currentFolderId = this.path.length > 0 ? this.path[this.path.length - 1].id : 'root';
+        const scrollTop = this.listEl.parentElement ? this.listEl.parentElement.scrollTop : this.listEl.scrollTop;
+        this.scrollCache[currentFolderId] = scrollTop;
     }
 
     /**
@@ -32,6 +39,7 @@ class FileExplorer {
         rootItem.className = 'breadcrumb-item';
         rootItem.textContent = this.app.i18n ? this.app.i18n.t('sourceGDrive') || 'GDrive' : 'GDrive';
         rootItem.onclick = () => {
+            this.saveScrollState();
             if (this.onNavigate) this.onNavigate('root');
         };
         this.breadcrumbsEl.appendChild(rootItem);
@@ -48,6 +56,7 @@ class FileExplorer {
             pathItem.textContent = folder.name;
             
             pathItem.onclick = () => {
+                this.saveScrollState();
                 if (this.onNavigate) this.onNavigate(folder.id, index + 1);
             };
             this.breadcrumbsEl.appendChild(pathItem);
@@ -97,6 +106,7 @@ class FileExplorer {
 
             li.addEventListener('click', () => {
                 if (item.type === 'folder') {
+                    this.saveScrollState();
                     if (this.onNavigate) {
                         this.onNavigate(item.id, -1, item.name); // passing folder data to append
                     }
@@ -109,6 +119,15 @@ class FileExplorer {
 
             this.listEl.appendChild(li);
         });
+
+        // Restore scroll position or scroll to top
+        const currentFolderId = this.path.length > 0 ? this.path[this.path.length - 1].id : 'root';
+        const targetScroll = this.scrollCache[currentFolderId] || 0;
+        
+        this.listEl.scrollTop = targetScroll;
+        if (this.listEl.parentElement) {
+            this.listEl.parentElement.scrollTop = targetScroll;
+        }
     }
 
     showEmptyDropHint() {
