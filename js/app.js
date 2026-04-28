@@ -28,7 +28,9 @@ class ZenReaderApp {
         this.quadBL = 'prev';
         this.quadBR = 'next';
         
-
+        this.syncCooldown = 15; // default 15 minutes
+        this.lastSyncTime = 0;
+        
         this.STATE_KEY = 'zen_reader_state';
 
         // Ensure dependencies are loaded
@@ -70,6 +72,9 @@ class ZenReaderApp {
         this.bindEvents();
         this.loadState();
         this.handleURLSync();
+
+        // Listen for remote progress signal from GAS
+        document.body.addEventListener('readingLog', (e) => this.handleRemoteProgress(e.detail));
     }
 
     initDOM() {
@@ -130,6 +135,7 @@ class ZenReaderApp {
                 if (state.quadBL) this.quadBL = state.quadBL;
                 if (state.quadBR) this.quadBR = state.quadBR;
                 
+                if (state.syncCooldown) this.syncCooldown = state.syncCooldown;
                 
                 if (state.lang && this.i18n) {
                     this.i18n.setLanguage(state.lang);
@@ -181,9 +187,28 @@ class ZenReaderApp {
     saveProgress() {
         const title = this.els.documentTitle.textContent;
         if (title && this.currentBookContent) {
-            this.savedPositions[title] = this.scrollOffset;
+            const now = Date.now();
+            // Store as object with position and UTC ISO timestamp
+            this.savedPositions[title] = {
+                pos: this.scrollOffset,
+                ts: new Date(now).toISOString()
+            };
             this.saveState({ positions: this.savedPositions });
+
+            // Remote sync with cooldown
+            const cooldownMs = this.syncCooldown * 60 * 1000;
+            if (now - this.lastSyncTime > cooldownMs) {
+                this.performRemoteSync(title, this.scrollOffset);
+                this.lastSyncTime = now;
+            }
         }
+    }
+
+    performRemoteSync(filename, offset) {
+        if (!this.gdrive) return;
+        const progress = this.maxScroll > 0 ? offset / this.maxScroll : 0;
+        const timestamp = new Date().toISOString();
+        this.gdrive.updateSheetProgress(filename, progress, timestamp);
     }
 
     rebuildAndShow(targetScroll = 0) {
@@ -258,8 +283,44 @@ class ZenReaderApp {
         
         this.resizeCanvas();
         
-        const targetChar = this.savedPositions[filename] || 0;
+        const savedData = this.savedPositions[filename] || 0;
+        // Support both old format (number) and new format (object {pos, ts})
+        const targetChar = (typeof savedData === 'object' && savedData !== null) ? (savedData.pos || 0) : savedData;
+        
         this.rebuildAndShow(targetChar);
+
+        // Check remote progress using Google Sheets directly
+        if (this.gdrive) {
+            const localProg = this.maxScroll > 0 ? targetChar / this.maxScroll : 0;
+            const localTs = (typeof savedData === 'object' && savedData !== null) ? savedData.ts : 0;
+            this.gdrive.syncSheetProgress(filename, localProg, localTs).then(remote => {
+                if (remote) {
+                    this.handleRemoteProgress(remote);
+                }
+            });
+        }
+    }
+
+    handleRemoteProgress(remote) {
+        if (!remote || remote.progress === undefined) return;
+        
+        const remotePercent = (remote.progress * 100).toFixed(3);
+        const msg = this.i18n ? 
+            `發現更晚的雲端進度 (${remotePercent}%)，是否同步？` : 
+            `Newer remote progress found (${remotePercent}%), sync now?`;
+        
+        if (confirm(msg)) {
+            // Convert percentage to scroll offset
+            const targetScroll = remote.progress * this.maxScroll;
+            this.rebuildAndShow(targetScroll);
+            // Save local with remote's time to prevent re-prompting
+            const filename = this.els.documentTitle.textContent;
+            this.savedPositions[filename] = {
+                pos: this.scrollOffset,
+                ts: remote.time
+            };
+            this.saveState({ positions: this.savedPositions });
+        }
     }
 
     async handleFile(file) {
@@ -375,11 +436,16 @@ class ZenReaderApp {
         this.applyLayoutChange();
     }
 
-    setQuad(pos, action) {
-        this[`quad${pos}`] = action;
-        const stateUpdate = {};
-        stateUpdate[`quad${pos}`] = action;
-        this.saveState(stateUpdate);
+    setQuad(quad, action) {
+        this[`quad${quad}`] = action;
+        const update = {};
+        update[`quad${quad}`] = action;
+        this.saveState(update);
+    }
+
+    setSyncCooldown(minutes) {
+        this.syncCooldown = parseInt(minutes);
+        this.saveState({ syncCooldown: this.syncCooldown });
     }
     
 

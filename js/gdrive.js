@@ -106,9 +106,9 @@ class GDriveModule {
         try {
             const gasUrl = 'https://script.google.com/macros/s/AKfycbz-93PY978YMvbZKH7-RDJNsSJVWISnDVkD4ESSvG5bGudMzAUPMagwqB2sJBZwIJ9nWQ/exec?token=' + encodeURIComponent(location.origin);
 
-            const data = (await this.authSilent(gasUrl)) || (await this.authPopup(gasUrl));
+            const data = (this.accessToken ? (await this.authSilent(gasUrl)) : null) || (await this.authPopup(gasUrl));
 
-            if (data.access_token) {
+            if (data && data.access_token) {
                 this.accessToken = data.access_token;
                 this.currentPath = [];
                 this.fetchFolder('root');
@@ -213,6 +213,206 @@ class GDriveModule {
         } catch (err) {
             console.error('Download Error:', err);
             this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveDownloadFail') : 'Download failed');
+        }
+    }
+
+    // --- Progress Sync Logic via Google Sheets ---
+
+    async getSheetId() {
+        if (this.sheetId) {
+            try {
+                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}?fields=spreadsheetId`, {
+                    headers: { 'Authorization': `Bearer ${this.accessToken}` }
+                });
+                if (res.ok) return this.sheetId;
+                if (res.status === 404) {
+                    this.sheetId = null;
+                    localStorage.removeItem('zen_reader_sheet_id');
+                }
+            } catch(e) {}
+        }
+
+        this.sheetId = localStorage.getItem('zen_reader_sheet_id');
+        if (this.sheetId) {
+           try {
+                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}?fields=spreadsheetId`, {
+                    headers: { 'Authorization': `Bearer ${this.accessToken}` }
+                });
+                if (res.ok) return this.sheetId;
+                this.sheetId = null;
+                localStorage.removeItem('zen_reader_sheet_id');
+           } catch(e) {}
+        }
+
+        if (!this.sheetId) {
+            try {
+                const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+                    method: 'POST',
+                    headers: { 
+                        'Authorization': `Bearer ${this.accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        properties: { title: "Reading Log" }
+                    })
+                });
+                const data = await res.json();
+                if (data.spreadsheetId) {
+                    this.sheetId = data.spreadsheetId;
+                    localStorage.setItem('zen_reader_sheet_id', this.sheetId);
+
+                    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}:batchUpdate`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${this.accessToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            requests: [{
+                                updateCells: {
+                                    range: { sheetId: 0, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 3 },
+                                    rows: [{
+                                        values: [
+                                            { userEnteredValue: { stringValue: "filename" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                            { userEnteredValue: { stringValue: "progress" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                            { userEnteredValue: { stringValue: "updatedAt" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
+                                        ]
+                                    }],
+                                    fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
+                                }
+                            }]
+                        })
+                    });
+                }
+            } catch(e) {
+                console.error("Failed to create sheet", e);
+            }
+        }
+        return this.sheetId;
+    }
+
+    async syncSheetProgress(filename, localProgress, localTimestamp) {
+        if (!this.accessToken) return null;
+        const sheetId = await this.getSheetId();
+        if (!sheetId) return null;
+
+        let actualSheetId = 0;
+        try {
+            const infoRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.sheetId`, {
+                headers: { 'Authorization': `Bearer ${this.accessToken}` }
+            });
+            const info = await infoRes.json();
+            if (info.sheets && info.sheets.length > 0) {
+                actualSheetId = info.sheets[0].properties.sheetId;
+            }
+        } catch(e) {}
+
+        let values = [];
+        try {
+            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A2:C1001`, {
+                headers: { 'Authorization': `Bearer ${this.accessToken}` }
+            });
+            const data = await res.json();
+            values = data.values || [];
+        } catch (e) {
+            console.error(e);
+            return null;
+        }
+
+        let foundIndex = -1;
+        let remoteProgress = 0.0;
+        let remoteTimestamp = "";
+
+        for (let i = 0; i < values.length; i++) {
+            if (values[i][0] === filename) {
+                foundIndex = i; 
+                remoteProgress = parseFloat(values[i][1]) || 0.0;
+                remoteTimestamp = values[i][2] || "";
+                break;
+            }
+        }
+
+        const requests = [];
+        let needsInsert = false;
+
+        if (foundIndex !== -1) {
+            if (foundIndex !== 0) {
+                const actualRowIndex = foundIndex + 1; // dimension is 0-indexed, so row actualRowIndex + 1
+                requests.push({
+                    deleteDimension: {
+                        range: { sheetId: actualSheetId, dimension: "ROWS", startIndex: actualRowIndex, endIndex: actualRowIndex + 1 }
+                    }
+                });
+                needsInsert = true;
+            }
+        } else {
+            needsInsert = true;
+        }
+
+        if (needsInsert) {
+            requests.push({
+                insertDimension: {
+                    range: { sheetId: actualSheetId, dimension: "ROWS", startIndex: 1, endIndex: 2 },
+                    inheritFromBefore: false
+                }
+            });
+            requests.push({
+                updateCells: {
+                    range: { sheetId: actualSheetId, startRowIndex: 1, endRowIndex: 2, startColumnIndex: 0, endColumnIndex: 3 },
+                    rows: [{
+                        values: [
+                            { userEnteredValue: { stringValue: filename } },
+                            { userEnteredValue: { numberValue: foundIndex !== -1 ? remoteProgress : (localProgress || 0.0) } },
+                            { userEnteredValue: { stringValue: foundIndex !== -1 ? remoteTimestamp : (localTimestamp || new Date().toISOString()) } }
+                        ]
+                    }],
+                    fields: "userEnteredValue"
+                }
+            });
+        }
+
+        if (requests.length > 0) {
+            try {
+                await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.accessToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ requests })
+                });
+            } catch (e) {
+                console.error("Batch update failed", e);
+            }
+        }
+
+        if (foundIndex !== -1 && remoteTimestamp) {
+            const remoteTime = new Date(remoteTimestamp).getTime();
+            const localTime = new Date(localTimestamp).getTime() || 0;
+            if (remoteTime > localTime) {
+                return { progress: remoteProgress, time: remoteTimestamp };
+            }
+        }
+
+        return null;
+    }
+
+    async updateSheetProgress(filename, progress, timestamp) {
+        if (!this.accessToken || !this.sheetId) return;
+
+        try {
+            await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}/values/A2:C2?valueInputOption=USER_ENTERED`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${this.accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    values: [[filename, progress, timestamp]]
+                })
+            });
+        } catch (err) {
+            console.error('Update Sheet Error:', err);
         }
     }
 }

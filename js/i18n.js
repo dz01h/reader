@@ -35,7 +35,9 @@ const translations = {
         actionNone: '無功能',
         
         settingAdvanced: '進階整合',
+        settingSyncCooldown: '同步冷卻時間',
         btnSyncQr: '產生同步 QR Code',
+        btnGasAuth: '重新授權 reader gas api',
         gdriveFetchingToken: '正在取得 Google 授權令牌...',
         gdriveLoginFail: 'Google 登入或授權失敗！',
         gdriveFetching: '正在讀取 Google Drive 檔案清單...',
@@ -83,7 +85,9 @@ const translations = {
         actionNone: '无功能',
         
         settingAdvanced: '进阶整合',
+        settingSyncCooldown: '同步冷却时间',
         btnSyncQr: '产生同步 QR Code',
+        btnGasAuth: '重新授权 reader gas api',
         gdriveFetchingToken: '正在取得 Google 授权令牌...',
         gdriveLoginFail: 'Google 登录或授权失败！',
         gdriveFetching: '正在读取 Google Drive 文件列表...',
@@ -131,7 +135,9 @@ const translations = {
         actionNone: 'None',
         
         settingAdvanced: 'Advanced Integrations',
+        settingSyncCooldown: 'Sync Cooldown',
         btnSyncQr: 'Generate Sync QR Code',
+        btnGasAuth: 'Re-authorize reader gas api',
         gdriveFetchingToken: 'Fetching Google access token...',
         gdriveLoginFail: 'Google Login or Authorization failed!',
         gdriveFetching: 'Fetching Google Drive file list...',
@@ -179,7 +185,9 @@ const translations = {
         actionNone: 'なし',
         
         settingAdvanced: '高度な統合',
+        settingSyncCooldown: '同期冷却時間',
         btnSyncQr: '同期用 QR コードを作成',
+        btnGasAuth: 'reader gas apiを再承認',
         gdriveFetchingToken: 'Google アクセストークンを取得中...',
         gdriveLoginFail: 'Google ログイン または 認証に失敗しました！',
         gdriveFetching: 'Google Drive ファイルリストを取得中...',

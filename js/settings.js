@@ -33,6 +33,8 @@ class ZenSettings {
         this.langSelect = document.getElementById('setting-lang');
         
         this.btnSyncQr = document.getElementById('btn-sync-qr');
+        this.btnGasAuth = document.getElementById('btn-gas-auth');
+        this.syncCooldownSelect = document.getElementById('setting-sync-cooldown');
         this.qrContainer = document.getElementById('qr-container');
         this.qrCodeEl = document.getElementById('qr-code');
     }
@@ -71,6 +73,10 @@ class ZenSettings {
         
         if (this.app.i18n && this.langSelect) {
             this.langSelect.value = this.app.i18n.lang;
+        }
+
+        if (this.syncCooldownSelect) {
+            this.syncCooldownSelect.value = this.app.syncCooldown;
         }
     }
 
@@ -153,6 +159,16 @@ class ZenSettings {
         
         if (this.langSelect) {
             this.langSelect.addEventListener('change', (e) => this.app.setLanguage(e.target.value));
+        }
+
+        if (this.syncCooldownSelect) {
+            this.syncCooldownSelect.addEventListener('change', (e) => this.app.setSyncCooldown(e.target.value));
+        }
+
+        if (this.btnGasAuth) {
+            this.btnGasAuth.addEventListener('click', () => {
+                window.open('https://myaccount.google.com/connections', '_blank');
+            });
         }
 
         if (this.btnSyncQr) {

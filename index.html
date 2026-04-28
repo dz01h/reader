@@ -191,7 +191,19 @@
             <fieldset class="setting-fieldset">
                 <legend data-i18n="settingAdvanced">進階整合</legend>
                 <div class="setting-group">
+                    <label for="setting-sync-cooldown" data-i18n="settingSyncCooldown">同步冷卻時間</label>
+                    <select id="setting-sync-cooldown" style="width: 100%;">
+                        <option value="1">1 min</option>
+                        <option value="5">5 min</option>
+                        <option value="10">10 min</option>
+                        <option value="15">15 min</option>
+                        <option value="30">30 min</option>
+                        <option value="60">60 min</option>
+                    </select>
+                </div>
+                <div class="setting-group">
                     <button id="btn-sync-qr" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnSyncQr">產生同步 QR Code</button>
+                    <button id="btn-gas-auth" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnGasAuth">重新授權 Google 權限</button>
                 </div>
                 
                 <div id="qr-container" class="hidden" style="margin-top: 1rem; text-align: center; background: white; padding: 1rem; border-radius: 8px;">
