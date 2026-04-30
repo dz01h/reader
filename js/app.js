@@ -156,12 +156,14 @@ class ZenReaderApp {
             this.loadBookIntoReader(book.filename, book.content);
             this.showToast(`已載入上次閱讀的書籍`);
         }
+        
+        this.updateThemeColor();
     }
 
     async closeReader() {
         document.body.classList.remove('reading-mode');
         document.body.classList.remove('ui-hidden');
-        this.updateFullscreen();
+        this.updateThemeColor();
         this.els.readerContainer.classList.add('hidden');
         this.els.headerCenter.classList.add('hidden');
         this.els.dropZone.classList.remove('hidden');
@@ -293,9 +295,9 @@ class ZenReaderApp {
         this.els.documentTitle.textContent = filename;
         
         document.body.classList.add('reading-mode');
-        // Start with UI visible, user will tap to hide and enter fullscreen
+        // Start with UI visible, user will tap to hide
         document.body.classList.remove('ui-hidden');
-        this.updateFullscreen();
+        this.updateThemeColor();
 
         this.els.dropZone.classList.add('hidden');
         this.els.readerContainer.classList.remove('hidden');
@@ -380,19 +382,19 @@ class ZenReaderApp {
         }
     }
 
-    updateFullscreen() {
-        const isHidden = document.body.classList.contains('ui-hidden');
-        const isReading = document.body.classList.contains('reading-mode');
+    updateThemeColor() {
+        const theme = document.documentElement.getAttribute('data-theme') || 'light';
+        // Match the background colors from CSS: Light: #f9f9fb, Dark: #0f172a
+        const color = (theme === 'dark') ? '#0f172a' : '#f9f9fb';
         
-        if (isReading && isHidden) {
-            const doc = document.documentElement;
-            if (doc.requestFullscreen) doc.requestFullscreen().catch(() => {});
-            else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen();
+        const metas = document.querySelectorAll('meta[name="theme-color"]');
+        if (metas.length === 0) {
+            const meta = document.createElement('meta');
+            meta.name = 'theme-color';
+            meta.content = color;
+            document.head.appendChild(meta);
         } else {
-            if (document.fullscreenElement || document.webkitFullscreenElement) {
-                if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
-                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-            }
+            metas.forEach(m => m.setAttribute('content', color));
         }
     }
 
@@ -440,6 +442,7 @@ class ZenReaderApp {
     // Public Setters for Options Dialog
     setTheme(newTheme) {
         document.documentElement.setAttribute('data-theme', newTheme);
+        this.updateThemeColor();
         this.saveState({ theme: newTheme });
         if (this.currentBookContent) this.showPage(this.currentPageIndex); 
     }
@@ -551,14 +554,12 @@ class ZenReaderApp {
 
             if (isMiddleX && isMiddleY) {
                 document.body.classList.toggle('ui-hidden');
-                this.updateFullscreen();
                 return;
             }
 
             // If hitting other quadrants while UI is visible in mobile, hide it first
             if (window.innerWidth <= 768 && !document.body.classList.contains('ui-hidden')) {
                 document.body.classList.add('ui-hidden');
-                this.updateFullscreen();
                 return; 
             }
             
