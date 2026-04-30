@@ -10,6 +10,8 @@ const translations = {
         btnGDrive: '由 Google Drive 載入',
         progressTitle: '拖動調整閱讀進度',
         toastReady: '離線模式已就緒',
+        toastOnline: '已恢復網路連線',
+        toastOffline: '目前處於離線模式',
         
         settingsTitle: '閱讀設定',
         settingLanguage: '介面語言',
@@ -61,6 +63,8 @@ const translations = {
         btnGDrive: '由 Google Drive 载入',
         progressTitle: '拖动调整阅读进度',
         toastReady: '离线模式已就绪',
+        toastOnline: '已恢复网络连接',
+        toastOffline: '目前处于离线模式',
         
         settingsTitle: '阅读设置',
         settingLanguage: '界面语言',
@@ -111,9 +115,11 @@ const translations = {
         btnSelectLocal: 'Select Local File',
         btnGDrive: 'Load from Google Drive',
         progressTitle: 'Drag to adjust progress',
-        toastReady: 'Offline mode ready',
+        toastReady: 'Offline mode is ready',
+        toastOnline: 'Network connection restored',
+        toastOffline: 'Currently in offline mode',
         
-        settingsTitle: 'Settings',
+        settingsTitle: 'Reading Settings',
         settingLanguage: 'Language',
         settingTheme: 'Theme',
         themeLight: 'Light',
@@ -163,8 +169,10 @@ const translations = {
         btnGDrive: 'Google Drive から読み込む',
         progressTitle: 'ドラッグして進行状況を調整',
         toastReady: 'オフラインモード準備完了',
+        toastOnline: 'ネットワーク接続が復旧しました',
+        toastOffline: '現在オフラインモードです',
         
-        settingsTitle: '設定',
+        settingsTitle: '読書設定',
         settingLanguage: '言語',
         settingTheme: 'テーマ',
         themeLight: 'ライト',

@@ -21,6 +21,39 @@ class GDriveModule {
         window.addEventListener('popstate', this.handlePopState.bind(this));
     }
 
+    async ensureAuth() {
+        if (this.accessToken && this.expiresAt > Date.now()) {
+            return true;
+        }
+
+        // Try to reload from localStorage first
+        const cached = localStorage.getItem('gdrive_auth');
+        if (cached) {
+            try {
+                const auth = JSON.parse(cached);
+                if (auth.expiresAt > Date.now()) {
+                    this.accessToken = auth.accessToken;
+                    this.expiresAt = auth.expiresAt;
+                    return true;
+                }
+            } catch(e) {}
+        }
+
+        // If we are online, try silent refresh via iframe
+        if (navigator.onLine) {
+            try {
+                const gasUrl = 'https://script.google.com/macros/s/AKfycbz-93PY978YMvbZKH7-RDJNsSJVWISnDVkD4ESSvG5bGudMzAUPMagwqB2sJBZwIJ9nWQ/exec?token=' + encodeURIComponent(location.origin);
+                const data = await this.authSilent(gasUrl);
+                if (data && data.access_token) {
+                    // Tokens are already saved to this and localStorage via handleAuthMessage
+                    return true;
+                }
+            } catch(e) {}
+        }
+
+        return false;
+    }
+
     handlePopState(event) {
         if (this.app.explorer) {
             this.app.explorer.saveScrollState();
@@ -221,16 +254,55 @@ class GDriveModule {
                 }
             });
 
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+
+            const contentLength = response.headers.get('content-length');
+            const total = contentLength ? parseInt(contentLength, 10) : 0;
+            let loaded = 0;
+
+            const reader = response.body.getReader();
+            const chunks = [];
+            let lastUpdate = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                chunks.push(value);
+                loaded += value.length;
+                
+                const now = Date.now();
+                if (now - lastUpdate > 100) {
+                    lastUpdate = now;
+                    if (total) {
+                        const percent = Math.round((loaded / total) * 100);
+                        this.app.showToast(`下載中... ${percent}%`, 0); // 0 means do not auto-hide
+                    } else {
+                        const mb = (loaded / 1024 / 1024).toFixed(2);
+                        this.app.showToast(`下載中... ${mb} MB`, 0);
+                    }
+                }
+            }
+            
+            this.app.showToast(`處理中...`, 0);
+
+            // Combine chunks
+            const mergedArray = new Uint8Array(loaded);
+            let offset = 0;
+            for (let chunk of chunks) {
+                mergedArray.set(chunk, offset);
+                offset += chunk.length;
+            }
+
             if (mimeType === 'application/zip' || fileName.endsWith('.zip')) {
-                const blob = await response.blob();
+                const blob = new Blob([mergedArray], { type: 'application/zip' });
                 if (this.app.zipHandler) {
                     this.app.zipHandler.processZip(blob, fileName);
                 } else {
                     this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveZipDev') : 'ZIP support coming soon.');
                 }
             } else {
-                const buffer = await response.arrayBuffer();
-                const text = this.app.decodeText(new Uint8Array(buffer));
+                const text = this.app.decodeText(mergedArray);
                 await this.app.db.saveBook(fileName, text);
                 this.app.loadBookIntoReader(fileName, text);
             }
@@ -316,7 +388,10 @@ class GDriveModule {
     }
 
     async syncSheetProgress(filename, localProgress, localTimestamp) {
-        if (!this.accessToken) return null;
+        if (!this.accessToken || this.expiresAt <= Date.now()) {
+            const ok = await this.ensureAuth();
+            if (!ok) return null;
+        }
         const sheetId = await this.getSheetId();
         if (!sheetId) return null;
 
@@ -422,7 +497,14 @@ class GDriveModule {
     }
 
     async updateSheetProgress(filename, progress, timestamp) {
-        if (!this.accessToken || !this.sheetId) return;
+        if (!this.accessToken || this.expiresAt <= Date.now()) {
+            const ok = await this.ensureAuth();
+            if (!ok) return;
+        }
+        if (!this.sheetId) {
+            this.sheetId = await this.getSheetId();
+        }
+        if (!this.sheetId) return;
 
         try {
             await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}/values/A2:C2?valueInputOption=USER_ENTERED`, {

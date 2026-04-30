@@ -161,6 +161,7 @@ class ZenReaderApp {
     async closeReader() {
         document.body.classList.remove('reading-mode');
         document.body.classList.remove('ui-hidden');
+        this.updateFullscreen();
         this.els.readerContainer.classList.add('hidden');
         this.els.headerCenter.classList.add('hidden');
         this.els.dropZone.classList.remove('hidden');
@@ -292,9 +293,9 @@ class ZenReaderApp {
         this.els.documentTitle.textContent = filename;
         
         document.body.classList.add('reading-mode');
-        if (window.innerWidth <= 768) {
-            document.body.classList.add('ui-hidden');
-        }
+        // Start with UI visible, user will tap to hide and enter fullscreen
+        document.body.classList.remove('ui-hidden');
+        this.updateFullscreen();
 
         this.els.dropZone.classList.add('hidden');
         this.els.readerContainer.classList.remove('hidden');
@@ -369,11 +370,30 @@ class ZenReaderApp {
         reader.readAsArrayBuffer(file);
     }
 
-    showToast(msg) {
+    showToast(msg, duration = 3000) {
         const toast = document.getElementById('toast');
         toast.textContent = msg;
         toast.classList.add('show');
-        setTimeout(() => toast.classList.remove('show'), 3000);
+        if (this.toastTimeout) clearTimeout(this.toastTimeout);
+        if (duration > 0) {
+            this.toastTimeout = setTimeout(() => toast.classList.remove('show'), duration);
+        }
+    }
+
+    updateFullscreen() {
+        const isHidden = document.body.classList.contains('ui-hidden');
+        const isReading = document.body.classList.contains('reading-mode');
+        
+        if (isReading && isHidden) {
+            const doc = document.documentElement;
+            if (doc.requestFullscreen) doc.requestFullscreen().catch(() => {});
+            else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen();
+        } else {
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+            }
+        }
     }
 
     decodeText(uint8array) {
@@ -531,12 +551,14 @@ class ZenReaderApp {
 
             if (isMiddleX && isMiddleY) {
                 document.body.classList.toggle('ui-hidden');
+                this.updateFullscreen();
                 return;
             }
 
             // If hitting other quadrants while UI is visible in mobile, hide it first
             if (window.innerWidth <= 768 && !document.body.classList.contains('ui-hidden')) {
                 document.body.classList.add('ui-hidden');
+                this.updateFullscreen();
                 return; 
             }
             
@@ -642,8 +664,27 @@ class ZenReaderApp {
             if (e.dataTransfer.files.length) this.handleFile(e.dataTransfer.files[0]);
         });
 
-        window.addEventListener('online', () => this.showToast('已恢復網路連線'));
-        window.addEventListener('offline', () => this.showToast('目前處於離線模式'));
+        window.addEventListener('online', () => {
+            // Silent sync if currently reading
+            // If currently reading, check and sync progress
+            if (document.body.classList.contains('reading-mode') && this.gdrive) {
+                const filename = this.els.documentTitle.textContent;
+                const savedData = this.savedPositions[filename];
+                const localProg = this.maxScroll > 0 ? this.scrollOffset / this.maxScroll : 0;
+                const localTs = (typeof savedData === 'object' && savedData !== null) ? savedData.ts : 0;
+
+                // Attempt to sync (ensureAuth is called internally)
+                this.gdrive.syncSheetProgress(filename, localProg, localTs).then(remote => {
+                    if (remote) {
+                        this.handleRemoteProgress(remote);
+                    } else {
+                        // Push local if no conflict
+                        this.performRemoteSync(filename, this.scrollOffset);
+                    }
+                });
+            }
+        });
+        window.addEventListener('offline', () => {}); // Background stay quiet
     }
 
     onDragStart(e) {
