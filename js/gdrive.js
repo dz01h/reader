@@ -388,12 +388,19 @@ class GDriveModule {
     }
 
     async syncSheetProgress(filename, localProgress, localTimestamp) {
+        if (this.app) this.app.updateSyncStatus('syncing');
         if (!this.accessToken || this.expiresAt <= Date.now()) {
             const ok = await this.ensureAuth();
-            if (!ok) return null;
+            if (!ok) {
+                if (this.app) this.app.updateSyncStatus('error', 'Auth failed');
+                return null;
+            }
         }
         const sheetId = await this.getSheetId();
-        if (!sheetId) return null;
+        if (!sheetId) {
+            if (this.app) this.app.updateSyncStatus('error', 'Sheet not found');
+            return null;
+        }
 
         let actualSheetId = 0;
         try {
@@ -404,7 +411,9 @@ class GDriveModule {
             if (info.sheets && info.sheets.length > 0) {
                 actualSheetId = info.sheets[0].properties.sheetId;
             }
-        } catch(e) {}
+        } catch(e) {
+            if (this.app) this.app.updateSyncStatus('error', 'Failed to get sheet info');
+        }
 
         let values = [];
         try {
@@ -412,9 +421,11 @@ class GDriveModule {
                 headers: { 'Authorization': `Bearer ${this.accessToken}` }
             });
             const data = await res.json();
+            if (!res.ok) throw new Error(data.error?.message || 'Failed to fetch values');
             values = data.values || [];
         } catch (e) {
             console.error(e);
+            if (this.app) this.app.updateSyncStatus('error', e.message);
             return null;
         }
 
@@ -472,7 +483,7 @@ class GDriveModule {
 
         if (requests.length > 0) {
             try {
-                await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${this.accessToken}`,
@@ -480,9 +491,18 @@ class GDriveModule {
                     },
                     body: JSON.stringify({ requests })
                 });
+                if (res.ok) {
+                    if (this.app) this.app.updateSyncStatus('success');
+                } else {
+                    const errData = await res.json();
+                    if (this.app) this.app.updateSyncStatus('error', errData.error?.message || 'Sync failed');
+                }
             } catch (e) {
                 console.error("Batch update failed", e);
+                if (this.app) this.app.updateSyncStatus('error', e.message);
             }
+        } else {
+            if (this.app) this.app.updateSyncStatus('success');
         }
 
         if (foundIndex !== -1 && remoteTimestamp) {
@@ -497,17 +517,24 @@ class GDriveModule {
     }
 
     async updateSheetProgress(filename, progress, timestamp) {
+        if (this.app) this.app.updateSyncStatus('syncing');
         if (!this.accessToken || this.expiresAt <= Date.now()) {
             const ok = await this.ensureAuth();
-            if (!ok) return;
+            if (!ok) {
+                if (this.app) this.app.updateSyncStatus('error', 'Auth failed');
+                return;
+            }
         }
         if (!this.sheetId) {
             this.sheetId = await this.getSheetId();
         }
-        if (!this.sheetId) return;
+        if (!this.sheetId) {
+            if (this.app) this.app.updateSyncStatus('error', 'Sheet not found');
+            return;
+        }
 
         try {
-            await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}/values/A2:C2?valueInputOption=USER_ENTERED`, {
+            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}/values/A2:C2?valueInputOption=USER_ENTERED`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${this.accessToken}`,
@@ -517,8 +544,15 @@ class GDriveModule {
                     values: [[filename, progress, timestamp]]
                 })
             });
+            if (res.ok) {
+                if (this.app) this.app.updateSyncStatus('success');
+            } else {
+                const errData = await res.json();
+                if (this.app) this.app.updateSyncStatus('error', errData.error?.message || 'Update failed');
+            }
         } catch (err) {
             console.error('Update Sheet Error:', err);
+            if (this.app) this.app.updateSyncStatus('error', err.message);
         }
     }
 }

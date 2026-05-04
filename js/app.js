@@ -398,6 +398,31 @@ class ZenReaderApp {
         }
     }
 
+    updateSyncStatus(status, message = '') {
+        const el = document.getElementById('sync-status');
+        const timeEl = document.getElementById('sync-time');
+        const msgEl = document.getElementById('sync-msg');
+        
+        if (!el) return;
+        
+        el.classList.remove('hidden', 'syncing', 'success', 'error');
+        
+        if (status === 'syncing') {
+            el.classList.add('syncing');
+            msgEl.textContent = message || (this.i18n ? this.i18n.t('syncing') : 'Syncing...');
+        } else if (status === 'success') {
+            el.classList.add('success');
+            timeEl.textContent = new Date().toLocaleTimeString();
+            msgEl.textContent = message || (this.i18n ? this.i18n.t('syncSuccess') : 'Sync successful');
+        } else if (status === 'error') {
+            el.classList.add('error');
+            timeEl.textContent = new Date().toLocaleTimeString();
+            msgEl.textContent = message || (this.i18n ? this.i18n.t('syncError') : 'Sync failed');
+        } else {
+            el.classList.add('hidden');
+        }
+    }
+
     decodeText(uint8array) {
         // Check for BOMs (Byte Order Marks)
         if (uint8array.length >= 2) {
