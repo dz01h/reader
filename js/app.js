@@ -423,6 +423,27 @@ class ZenReaderApp {
         }
     }
 
+    checkAndSyncCloudProgress() {
+        if (document.body.classList.contains('reading-mode') && this.gdrive && navigator.onLine) {
+            const filename = this.els.documentTitle.textContent;
+            if (!filename) return;
+            
+            const savedData = this.savedPositions[filename];
+            const localProg = this.maxScroll > 0 ? this.scrollOffset / this.maxScroll : 0;
+            const localTs = (typeof savedData === 'object' && savedData !== null) ? savedData.ts : 0;
+
+            // Attempt to sync (ensureAuth is called internally)
+            this.gdrive.syncSheetProgress(filename, localProg, localTs).then(remote => {
+                if (remote) {
+                    this.handleRemoteProgress(remote);
+                } else {
+                    // Push local if no conflict
+                    this.performRemoteSync(filename, this.scrollOffset);
+                }
+            });
+        }
+    }
+
     decodeText(uint8array) {
         // Check for BOMs (Byte Order Marks)
         if (uint8array.length >= 2) {
@@ -692,25 +713,16 @@ class ZenReaderApp {
 
         window.addEventListener('online', () => {
             // Silent sync if currently reading
-            // If currently reading, check and sync progress
-            if (document.body.classList.contains('reading-mode') && this.gdrive) {
-                const filename = this.els.documentTitle.textContent;
-                const savedData = this.savedPositions[filename];
-                const localProg = this.maxScroll > 0 ? this.scrollOffset / this.maxScroll : 0;
-                const localTs = (typeof savedData === 'object' && savedData !== null) ? savedData.ts : 0;
-
-                // Attempt to sync (ensureAuth is called internally)
-                this.gdrive.syncSheetProgress(filename, localProg, localTs).then(remote => {
-                    if (remote) {
-                        this.handleRemoteProgress(remote);
-                    } else {
-                        // Push local if no conflict
-                        this.performRemoteSync(filename, this.scrollOffset);
-                    }
-                });
-            }
+            this.checkAndSyncCloudProgress();
         });
         window.addEventListener('offline', () => {}); // Background stay quiet
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                // When device is unlocked or user returns to tab
+                this.checkAndSyncCloudProgress();
+            }
+        });
     }
 
     onDragStart(e) {
