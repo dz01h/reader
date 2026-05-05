@@ -76,7 +76,16 @@
         <footer class="status-bar hidden" id="status-bar">
             <div class="progress-container">
                 <input type="range" id="progress-slider" min="0" max="100" step="0.001" value="0" data-i18n="title:progressTitle" title="拖動調整閱讀進度">
-                <span id="page-indicator">0.000%</span>
+                <div class="progress-info">
+                    <span id="page-indicator">0.000%</span>
+                    <div id="sync-status" class="sync-status hidden">
+                        <div class="sync-icon"></div>
+                        <div class="sync-tooltip">
+                            <div id="sync-time">-</div>
+                            <div id="sync-msg">-</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </footer>
 
@@ -214,13 +223,7 @@
         </div>
     </dialog>
 
-    <div id="sync-status" class="sync-status hidden">
-        <div class="sync-icon"></div>
-        <div class="sync-tooltip">
-            <div id="sync-time">-</div>
-            <div id="sync-msg">-</div>
-        </div>
-    </div>
+
 
     <!-- JS Engine and logic imports -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>

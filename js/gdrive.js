@@ -342,6 +342,25 @@ class GDriveModule {
 
         if (!this.sheetId) {
             try {
+                // Search for existing Reading Log spreadsheet in the user's Drive
+                const q = encodeURIComponent("name = 'Reading Log' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false");
+                const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
+                    headers: { 'Authorization': `Bearer ${this.accessToken}` }
+                });
+                if (searchRes.ok) {
+                    const searchData = await searchRes.json();
+                    if (searchData.files && searchData.files.length > 0) {
+                        this.sheetId = searchData.files[0].id;
+                        localStorage.setItem('zen_reader_sheet_id', this.sheetId);
+                        console.log("Found existing Reading Log sheet:", this.sheetId);
+                        return this.sheetId;
+                    }
+                }
+            } catch (e) {
+                console.warn("Search for existing sheet failed, will create new one.", e);
+            }
+
+            try {
                 const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
                     method: 'POST',
                     headers: { 

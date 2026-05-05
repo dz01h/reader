@@ -447,6 +447,12 @@ select, input[type="text"] {
     margin: 0 auto;
 }
 
+.progress-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 #progress-slider {
     width: 100%;
     max-width: none;
@@ -623,10 +629,7 @@ select, input[type="text"] {
 
 /* Sync Status Indicator */
 .sync-status {
-    position: fixed;
-    bottom: 1.5rem;
-    right: 1.5rem;
-    z-index: 2000;
+    position: relative;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -638,8 +641,8 @@ select, input[type="text"] {
 }
 
 .sync-icon {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
     background-color: #cbd5e0; /* grey idle */
     border: 2px solid rgba(255, 255, 255, 0.5);
@@ -662,8 +665,9 @@ select, input[type="text"] {
 
 .sync-tooltip {
     position: absolute;
-    bottom: 2rem;
-    right: 0;
+    bottom: 1.5rem;
+    right: 50%;
+    transform: translateX(50%);
     background-color: var(--color-surface);
     color: var(--color-text);
     padding: 0.75rem;
@@ -676,6 +680,7 @@ select, input[type="text"] {
     transition: opacity 0.2s ease, visibility 0.2s ease;
     border: 1px solid var(--color-border);
     pointer-events: none;
+    z-index: 2001;
 }
 
 .sync-status:hover .sync-tooltip,
