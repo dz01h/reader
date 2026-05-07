@@ -423,34 +423,97 @@ select, input[type="text"] {
 /* Status Bar */
 .status-bar {
     display: flex;
+    flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     background-color: rgba(255, 255, 255, 0.8);
     backdrop-filter: blur(10px);
     border-top: 1px solid var(--color-border);
     width: 100%;
     margin-top: auto;
+    gap: 0.5rem;
 }
 
 [data-theme="dark"] .status-bar {
     background-color: rgba(30, 41, 59, 0.8);
 }
 
-.progress-container {
+.status-main {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    gap: 0.35rem;
-    width: 90%;
-    margin: 0 auto;
+    gap: 1.5rem;
+    width: 95%;
+    max-width: 1000px;
 }
 
-.progress-info {
+.status-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.status-top {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    width: 100%;
+}
+
+#progress-slider {
+    flex: 1;
+}
+
+.btn-tts-giant {
+    background: var(--color-primary);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-lg);
+    transition: transform 0.2s, background-color 0.2s;
+    font-size: 1.8rem;
+    flex-shrink: 0;
+}
+
+.btn-tts-giant:hover {
+    transform: scale(1.1);
+    background-color: var(--color-primary-dark);
+}
+
+.btn-tts-giant:active {
+    transform: scale(0.95);
+}
+
+.status-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.info-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+}
+
+.info-right select {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.25rem 0.5rem;
+    color: var(--color-text);
+    font-size: 0.85rem;
+    outline: none;
+    cursor: pointer;
 }
 
 #progress-slider {

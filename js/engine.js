@@ -27,11 +27,15 @@ class ZenEngine {
             
             if (char === '\n') {
                 if (!justAutoWrapped) {
+                    const oldX = x;
+                    const oldY = y;
                     if (mode === 'vertical') {
                         x -= lineHeight; y = margins.top;
                     } else {
                         y += lineHeight; x = margins.left;
                     }
+                    // Add newline as a control op so TTS knows where original breaks are
+                    drawOps.push({ char: '\n', x: oldX, y: oldY, isControl: true, charIndex: i });
                 }
                 justAutoWrapped = false;
                 i++; 
@@ -43,12 +47,25 @@ class ZenEngine {
             justAutoWrapped = false;
 
             const isAscii = char.charCodeAt(0) < 256;
+            let asciiSeqLen = 0;
+            if (isAscii && mode === 'vertical') {
+                // Peek ahead and back to find total length of ASCII sequence
+                let start = i;
+                while (start > 0 && text[start-1].charCodeAt(0) < 256 && text[start-1] !== '\n') start--;
+                let end = i;
+                while (end < text.length && text[end].charCodeAt(0) < 256 && text[end] !== '\n') end++;
+                asciiSeqLen = end - start;
+            }
+
             const charW = isAscii ? this.ctx.measureText(char).width : fontSize;
-            const isRotated = mode === 'vertical' && (isAscii || /^[「」『』（）〈〉《》—…~＿｜\-]$/.test(char));
+            // Only rotate if it's a sequence of 3 or more ASCII chars
+            const shouldRotateAscii = isAscii && asciiSeqLen >= 3;
+            const isRotated = mode === 'vertical' && (shouldRotateAscii || /^[「」『』（）〈〉《》—…~＿｜\-]$/.test(char));
 
             if (mode === 'vertical') {
                 const verticalAdvance = isRotated && isAscii ? charW : fontSize;
-                if (y + verticalAdvance > ch - margins.bottom) {
+                // Add 1px buffer to prevent sub-pixel cutting at the bottom
+                if (y + verticalAdvance > ch - margins.bottom - 1) {
                     x -= lineHeight; 
                     y = margins.top;
                     justAutoWrapped = true;
@@ -56,12 +73,13 @@ class ZenEngine {
                 drawOps.push({ char, x, y, isRotated, charIndex: i });
                 y += verticalAdvance + charSpacing;
             } else {
-                if (x + charW > cw - margins.right) {
+                // Add 1px buffer to prevent sub-pixel cutting at the right edge
+                if (x + charW > cw - margins.right - 1) {
                     y += lineHeight; 
                     x = margins.left;
                     justAutoWrapped = true;
                 }
-                drawOps.push({ char, x, y, isRotated: false, charIndex: i });
+                drawOps.push({ char, x, y, isRotated, charIndex: i });
                 x += charW + charSpacing;
             }
             i++;
@@ -112,6 +130,9 @@ class ZenEngine {
 
         for (let i = 0; i < drawOps.length; i++) {
             const op = drawOps[i];
+            
+            if (op.isControl) continue; // Skip newlines and other control characters
+            
             const coord = mode === 'vertical' ? op.x : op.y;
             
             // Fast culling
@@ -130,7 +151,13 @@ class ZenEngine {
                     this.ctx.fillText(op.char, -fontSize / 2, -fontSize / 2);
                     this.ctx.restore();
                 } else {
-                    this.ctx.fillText(op.char, op.x, op.y);
+                    let drawX = op.x;
+                    // Center narrow ASCII characters in vertical columns
+                    if (mode === 'vertical' && op.char.charCodeAt(0) < 256) {
+                        const w = this.ctx.measureText(op.char).width;
+                        drawX += (fontSize - w) / 2;
+                    }
+                    this.ctx.fillText(op.char, drawX, op.y);
                 }
             }
         }
