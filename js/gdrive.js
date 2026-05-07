@@ -527,7 +527,8 @@ class GDriveModule {
         if (foundIndex !== -1 && remoteTimestamp) {
             const remoteTime = new Date(remoteTimestamp).getTime();
             const localTime = new Date(localTimestamp).getTime() || 0;
-            if (remoteTime > localTime) {
+            // Only suggest jumping if cloud is newer AND progress is actually different
+            if (remoteTime > localTime && Math.abs(remoteProgress - localProgress) > 0.00001) {
                 return { progress: remoteProgress, time: remoteTimestamp };
             }
         }
