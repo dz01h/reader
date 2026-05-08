@@ -16,6 +16,7 @@ class ReadingPanel {
         this.velocity = 0;
         this.lastTime = 0;
         this.inertiaFrameId = null;
+        this.readingOverTimeout = null;
 
         this.bindEvents();
         this.initEventListeners();
@@ -33,7 +34,10 @@ class ReadingPanel {
         this.scrollOffset = 0;
         this.maxScroll = 0;
         this.drawOps = [];
-        if (this.inertiaFrameId) cancelAnimationFrame(this.inertiaFrameId);
+        if (this.inertiaFrameId) {
+            cancelAnimationFrame(this.inertiaFrameId);
+            this.inertiaFrameId = null;
+        }
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
@@ -90,9 +94,13 @@ class ReadingPanel {
             this.app.onScroll(this.scrollOffset, this.maxScroll);
         }
 
-        // Fire ReadingOver event with visible text ONLY when stable
+        // Fire ReadingOver event with visible text ONLY when stable (debounced)
         if (!this.isDragging && !this.inertiaFrameId) {
-            this.dispatchReadingOver();
+            if (this.readingOverTimeout) clearTimeout(this.readingOverTimeout);
+            this.readingOverTimeout = setTimeout(() => {
+                this.dispatchReadingOver();
+                this.readingOverTimeout = null;
+            }, 200);
         }
     }
 
@@ -110,9 +118,13 @@ class ReadingPanel {
         // In horizontal mode, they are top-to-bottom, left-to-right.
         // The drawOps are already in reading order.
         let text = visibleOps.map(o => o.char).join('');
+        const prog = this.maxScroll > 0 ? this.scrollOffset / this.maxScroll : 0;
         
         document.body.dispatchEvent(new CustomEvent('ReadingOver', {
-            detail: { reading: text }
+            detail: { 
+                reading: text,
+                prog: prog
+            }
         }));
     }
 
@@ -151,7 +163,10 @@ class ReadingPanel {
         this.lastDragCoord = this.app.currentWritingMode === 'vertical' ? e.screenX : e.screenY;
         this.lastTime = performance.now();
         this.velocity = 0;
-        if (this.inertiaFrameId) cancelAnimationFrame(this.inertiaFrameId);
+        if (this.inertiaFrameId) {
+            cancelAnimationFrame(this.inertiaFrameId);
+            this.inertiaFrameId = null;
+        }
     }
 
     onDragMove(e) {
@@ -184,12 +199,16 @@ class ReadingPanel {
 
     startInertialScroll(totalDisplacement, friction = 0.95) {
         if (!this.drawOps || this.drawOps.length === 0) return;
-        if (this.inertiaFrameId) cancelAnimationFrame(this.inertiaFrameId);
+        if (this.inertiaFrameId) {
+            cancelAnimationFrame(this.inertiaFrameId);
+            this.inertiaFrameId = null;
+        }
         
         let currentV = totalDisplacement * (1 - friction);
         
         const loop = () => {
             if (Math.abs(currentV) < 0.5) {
+                this.inertiaFrameId = null;
                 this.setScrollOffset(this.snapToGrid(this.scrollOffset));
                 this.app.saveProgress();
                 return;

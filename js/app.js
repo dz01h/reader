@@ -6,8 +6,7 @@ class ZenReaderApp {
         this.currentFontFamily = 'sans-serif';
         this.currentLineHeight = 1.8;
         this.margins = { top: 30, bottom: 30, left: 30, right: 30 };
-        this.currentBookContent = '';
-        this.savedPositions = {}; 
+        this.currentBook = null;
         this.ttsSpeed = 1.0;
         
         // Touch Quadrants
@@ -41,6 +40,16 @@ class ZenReaderApp {
         this.engine = this.readingPanel.engine;
         this.tts = new window.ZenTTS(this);
         
+        // GDrive module
+        if (window.ZenGDrive) {
+            this.gdrive = new window.ZenGDrive(this);
+        }
+
+        // Reading Progress Sync
+        if (window.ZenReadingLog) {
+            this.readingLog = new window.ZenReadingLog(this.gdrive);
+        }
+        
         // Settings Dialog module
         if (window.ZenSettings) {
              this.settings = new window.ZenSettings(this);
@@ -49,11 +58,6 @@ class ZenReaderApp {
         // File Explorer module
         if (window.FileExplorer) {
              this.explorer = new window.FileExplorer(this);
-        }
-        
-        // GDrive module
-        if (window.ZenGDrive) {
-             this.gdrive = new window.ZenGDrive(this);
         }
         
         // Zip Handler module
@@ -112,7 +116,6 @@ class ZenReaderApp {
                 if (state.margins) {
                     this.margins = state.margins;
                 }
-                if (state.positions) this.savedPositions = state.positions;
                 if (state.syncCooldown) this.syncCooldown = state.syncCooldown;
                 if (state.ttsSpeed) {
                     this.ttsSpeed = state.ttsSpeed;
@@ -137,9 +140,9 @@ class ZenReaderApp {
             document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
         }
 
-        const book = await this.db.loadBook();
-        if (book && book.content && book.content.length > 0) {
-            this.loadBookIntoReader(book.filename, book.content);
+        const book = await window.ZenBook.loadCurrentBook(this.db);
+        if (book) {
+            this.loadBookIntoReader(book);
             this.showToast(`已載入上次閱讀的書籍`);
         }
         
@@ -156,28 +159,16 @@ class ZenReaderApp {
     }
 
     saveProgress() {
-        if (!this.currentBookContent) return;
-        const filename = this.els.documentTitle.textContent;
+        if (!this.currentBook) return;
         const scrollOffset = this.readingPanel.scrollOffset;
         const maxScroll = this.readingPanel.maxScroll;
         const progress = maxScroll > 0 ? scrollOffset / maxScroll : 0;
-        const ts = Date.now();
-
-        this.savedPositions[filename] = { progress, ts };
-        this.saveState({ positions: this.savedPositions });
-
-        // Background cloud sync
-        if (this.gdrive && navigator.onLine) {
-            const now = Date.now();
-            if (now - this.lastSyncTime > this.syncCooldown * 60 * 1000) {
-                this.gdrive.updateSheetProgress(filename, progress, new Date(ts).toISOString());
-                this.lastSyncTime = now;
-            }
-        }
+        
+        this.currentBook.saveProgress(progress);
     }
 
     rebuildAndShow(targetScroll = 0) {
-        if (!this.currentBookContent) return;
+        if (!this.currentBook) return;
         
         const rect = this.els.canvas.getBoundingClientRect();
         // Use Math.floor to ensure integer dimensions for the layout engine
@@ -185,7 +176,7 @@ class ZenReaderApp {
         const ch = Math.floor(rect.height);
 
         const { drawOps, maxScroll } = this.engine.layoutDocument(
-            this.currentBookContent,
+            this.currentBook.content,
             this.currentFontSize,
             this.currentWritingMode,
             cw, ch,
@@ -199,9 +190,6 @@ class ZenReaderApp {
     }
 
     onScroll(scrollOffset, maxScroll) {
-        const percent = maxScroll > 0 ? ((scrollOffset / maxScroll) * 100).toFixed(3) : 0;
-        this.els.pageIndicator.textContent = `${percent}%`;
-        this.els.progressSlider.value = percent;
 
         if (this.tts) {
             this.tts.checkVisibility();
@@ -209,16 +197,21 @@ class ZenReaderApp {
     }
 
     applyLayoutChange() {
-        if (!this.currentBookContent) return;
+        if (!this.currentBook) return;
         const currentPercent = this.readingPanel.maxScroll > 0 ? this.readingPanel.scrollOffset / this.readingPanel.maxScroll : 0;
         this.rebuildAndShow(0);
         const targetScroll = this.readingPanel.maxScroll * currentPercent;
         this.readingPanel.setScrollOffset(this.readingPanel.snapToGrid(targetScroll));
     }
 
-    loadBookIntoReader(filename, content) {
-        this.currentBookContent = content;
-        this.els.documentTitle.textContent = filename;
+    loadBookIntoReader(book) {
+        this.currentBook = book;
+        this.els.documentTitle.textContent = book.filename;
+        
+        if (this.readingLog) {
+            this.readingLog.setReadingBook(book.filename);
+            this.readingLog.setCooldown(this.syncCooldown);
+        }
         
         document.body.classList.add('reading-mode');
         document.body.classList.remove('ui-hidden');
@@ -230,8 +223,7 @@ class ZenReaderApp {
         
         this.readingPanel.resize();
         
-        const savedData = this.savedPositions[filename] || 0;
-        const targetProgress = (typeof savedData === 'object' && savedData !== null) ? (savedData.progress || 0) : 0;
+        const targetProgress = book.progress || 0;
         
         this.rebuildAndShow(0); 
         this.readingPanel.setScrollOffset(this.readingPanel.maxScroll * targetProgress);
@@ -251,11 +243,13 @@ class ZenReaderApp {
         this.els.dropZone.classList.remove('hidden');
         this.els.statusBar.classList.add('hidden'); 
         this.els.documentTitle.textContent = '';
-        this.currentBookContent = '';
+        if (this.currentBook) {
+            await this.currentBook.deleteFromDB(this.db);
+            this.currentBook = null;
+        }
         this.els.fileInput.value = '';
         
         this.readingPanel.reset();
-        await this.db.deleteBook();
     }
 
     updateSyncStatus(status, message = '') {
@@ -314,36 +308,43 @@ class ZenReaderApp {
 
     // Cloud Sync
     checkAndSyncCloudProgress() {
-        if (!document.body.classList.contains('reading-mode') || !this.gdrive || !navigator.onLine) return;
-        const filename = this.els.documentTitle.textContent;
-        if (!filename) return;
-        const savedData = this.savedPositions[filename];
+        if (!document.body.classList.contains('reading-mode') || !this.gdrive || !this.readingLog || !navigator.onLine) return;
+        if (!this.currentBook) return;
+        const filename = this.currentBook.filename;
         const localProg = this.readingPanel.maxScroll > 0 ? this.readingPanel.scrollOffset / this.readingPanel.maxScroll : 0;
-        const localTs = (typeof savedData === 'object' && savedData !== null) ? savedData.ts : 0;
+        const localTs = this.currentBook.timestamp || 0;
 
-        this.gdrive.syncSheetProgress(filename, localProg, localTs).then(remote => {
-            if (remote) this.handleRemoteProgress(remote);
-            else this.performRemoteSync(filename, this.readingPanel.scrollOffset);
-        });
+        if (this.readingLog) {
+            this.readingLog.syncSheetProgress(filename, localProg, localTs).then(remote => {
+                if (remote) this.handleRemoteProgress(remote);
+                else this.performRemoteSync(filename, this.readingPanel.scrollOffset);
+            });
+        }
     }
 
     handleRemoteProgress(remote) {
-        if (!remote || remote.progress === undefined) return;
-        const remotePercent = (remote.progress * 100).toFixed(3);
-        const msg = this.i18n ? `發現更晚的雲端進度 (${remotePercent}%)，是否同步？` : `Newer remote progress found (${remotePercent}%), sync now?`;
-        if (confirm(msg)) {
-            const targetScroll = remote.progress * this.readingPanel.maxScroll;
-            this.readingPanel.setScrollOffset(targetScroll);
-            const filename = this.els.documentTitle.textContent;
-            this.savedPositions[filename] = { progress: remote.progress, ts: remote.time };
-            this.saveState({ positions: this.savedPositions });
+        if (!remote || !remote.progress || !this.currentBook) return;
+        
+        const currentSavedTs = this.currentBook.timestamp || 0;
+        const localProg = this.readingPanel.maxScroll > 0 ? this.readingPanel.scrollOffset / this.readingPanel.maxScroll : 0;
+        
+        // If remote time is older or same, ignore (unless local is 0)
+        if (localProg > 0 && new Date(remote.time).getTime() <= currentSavedTs) return;
+
+        if (confirm(`發現更晚的雲端進度 (${new Date(remote.time).toLocaleString()})\n進度：${(remote.progress * 100).toFixed(2)}%\n是否跳轉？`)) {
+            const targetScroll = this.readingPanel.maxScroll * remote.progress;
+            this.readingPanel.setScrollOffset(this.readingPanel.snapToGrid(targetScroll));
+            
+            // update local save immediately
+            this.currentBook.timestamp = new Date(remote.time).getTime();
+            this.currentBook.saveProgress(remote.progress);
         }
     }
 
     performRemoteSync(filename, offset) {
-        if (!this.gdrive) return;
+        if (!this.readingLog) return;
         const progress = this.readingPanel.maxScroll > 0 ? offset / this.readingPanel.maxScroll : 0;
-        this.gdrive.updateSheetProgress(filename, progress, new Date().toISOString());
+        this.readingLog.updateSheetProgress(filename, progress, new Date().toISOString());
     }
 
     // Helper methods
@@ -375,9 +376,11 @@ class ZenReaderApp {
         }
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const text = this.decodeText(new Uint8Array(e.target.result));
-            await this.db.saveBook(file.name, text);
-            this.loadBookIntoReader(file.name, text);
+            const text = await this.decodeText(new Uint8Array(e.target.result));
+        const book = new window.ZenBook(file.name, text);
+        book.loadProgress();
+        await book.saveToDB(this.db);
+        this.loadBookIntoReader(book);
         };
         reader.readAsArrayBuffer(file);
     }
@@ -430,6 +433,9 @@ class ZenReaderApp {
     setSyncCooldown(minutes) {
         this.syncCooldown = parseInt(minutes);
         this.saveState({ syncCooldown: this.syncCooldown });
+        if (this.readingLog) {
+            this.readingLog.setCooldown(this.syncCooldown);
+        }
     }
     setLanguage(langCode) {
         if (this.i18n && this.i18n.setLanguage(langCode)) this.saveState({ lang: langCode });
@@ -452,10 +458,20 @@ class ZenReaderApp {
         this.els.btnUpload.addEventListener('click', () => this.els.fileInput.click());
         if (this.els.btnGDrive && this.gdrive) this.els.btnGDrive.addEventListener('click', () => this.gdrive.handleAuthClick());
         
+        document.body.addEventListener('UpdateSyncStatus', (e) => {
+            this.updateSyncStatus(e.detail.status, e.detail.message);
+        });
+
+        document.body.addEventListener('ReadingOver', (e) => {
+            const percent = (e.detail.prog * 100).toFixed(3);
+            this.els.pageIndicator.textContent = `${percent}%`;
+            this.els.progressSlider.value = percent;
+        });
+
         this.els.fileInput.addEventListener('change', (e) => { if (e.target.files.length) this.handleFile(e.target.files[0]); });
         this.els.progressSlider.addEventListener('input', (e) => { this.els.pageIndicator.textContent = `${parseFloat(e.target.value).toFixed(3)}%`; });
         this.els.progressSlider.addEventListener('change', (e) => {
-            if (!this.currentBookContent) return;
+            if (!this.currentBook) return;
             const target = this.readingPanel.maxScroll * (parseFloat(e.target.value) / 100);
             this.readingPanel.setScrollOffset(target);
             this.saveProgress();
@@ -471,7 +487,7 @@ class ZenReaderApp {
         });
 
         window.addEventListener('resize', () => {
-            if (!this.currentBookContent) return;
+            if (!this.currentBook) return;
             const currentPercent = this.readingPanel.maxScroll > 0 ? this.readingPanel.scrollOffset / this.readingPanel.maxScroll : 0;
             this.readingPanel.resize();
             this.rebuildAndShow(0);
@@ -479,7 +495,13 @@ class ZenReaderApp {
             this.readingPanel.setScrollOffset(this.readingPanel.snapToGrid(targetScroll));
         });
 
-        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.checkAndSyncCloudProgress(); });
+        document.addEventListener('visibilitychange', () => { 
+            if (document.visibilityState === 'visible') {
+                this.checkAndSyncCloudProgress(); 
+            } else if (this.readingLog) {
+                this.readingLog.resetInit();
+            }
+        });
         window.addEventListener('online', () => this.checkAndSyncCloudProgress());
     }
 }

@@ -61,8 +61,10 @@ class ZipHandler {
             const text = this.app.decodeText(uint8array);
             
             const finalName = `[${zipName}] ${fileName}`;
-            await this.app.db.saveBook(finalName, text);
-            this.app.loadBookIntoReader(finalName, text);
+            const book = new window.ZenBook(finalName, text);
+            book.loadProgress();
+            await book.saveToDB(this.app.db);
+            this.app.loadBookIntoReader(book);
         } catch (e) {
             console.error(e);
             this.app.showToast('解壓縮或載入失敗！');
