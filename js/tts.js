@@ -28,7 +28,9 @@ class ZenTTS {
         // Background Keep-Alive Audio
         this.silentAudio = new Audio();
         this.silentAudio.loop = true;
-        this.silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==";
+        // More robust silent WAV (8000Hz, Mono, 16-bit)
+        this.silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEAIlYAAChcAQACABAAZGF0YQQAAAAAAA==";
+        this.silentAudio.load();
         
         this.initMediaSession();
     }
@@ -135,9 +137,19 @@ class ZenTTS {
         if (this.els.icon) this.els.icon.textContent = '⏸';
 
         if (this.silentAudio) {
+            // Re-ensure source is set if it was lost
+            if (!this.silentAudio.src) {
+                this.silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFRm10IBAAAAABAAEAIlYAAChcAQACABAAZGF0YQQAAAAAAA==";
+            }
+            
             this.silentAudio.play().catch(e => {
-                console.log("Audio play blocked", e);
-                this.app.showToast(`Audio Context Blocked: ${e.message}`);
+                console.warn("Silent audio playback failed:", e.message);
+                // If it's just a playback block, we can still try to proceed with TTS
+                if (e.name === 'NotAllowedError') {
+                    this.app.showToast("TTS: 背景撥放可能受限 (請點擊螢幕允許音訊)");
+                } else {
+                    this.app.showToast(`音訊啟動失敗: ${e.message}`);
+                }
             });
         }
 
