@@ -135,7 +135,17 @@ class ZenTTS {
         if (this.els.icon) this.els.icon.textContent = '⏸';
 
         if (this.silentAudio) {
-            this.silentAudio.play().catch(e => console.log("Audio play blocked", e));
+            this.silentAudio.play().catch(e => {
+                console.log("Audio play blocked", e);
+                this.app.showToast(`Audio Context Blocked: ${e.message}`);
+            });
+        }
+
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) {
+            this.app.showToast("Warning: No TTS voices detected. Check system settings.");
+        } else {
+            this.app.showToast("TTS Starting...");
         }
 
         this.chunkIndex = 0;
@@ -159,6 +169,10 @@ class ZenTTS {
         utterance.rate = this.app.ttsSpeed || 1.0;
         utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-TW' : 'en-US';
 
+        utterance.onstart = () => {
+            console.log("TTS started:", text.substring(0, 20));
+        };
+
         utterance.onend = () => {
             if (sid !== this.sessionId || !this.isPlaying) return;
             this.chunkIndex++;
@@ -166,13 +180,36 @@ class ZenTTS {
         };
 
         utterance.onerror = (e) => {
-            if (sid !== this.sessionId || e.error === 'interrupted') return;
-            console.error("TTS Error", e);
+            if (sid !== this.sessionId) return;
+            if (e.error === 'interrupted') {
+                console.log("TTS interrupted (normal)");
+                return;
+            }
+            console.error("TTS Error Detail:", e.error, e.message, e);
+            this.app.showToast(`TTS Error: ${e.error}`);
             this.stop();
         };
 
         this.updateMediaMetadata(text);
-        window.speechSynthesis.speak(utterance);
+        
+        // Debug info for Android (also show as toast if it's the very first attempt)
+        const voices = window.speechSynthesis.getVoices();
+        if (sid === 1) { 
+            console.log("Available voices:", voices.length);
+            if (voices.length === 0) {
+                this.app.showToast("No voices loaded yet. Retrying...");
+            }
+        }
+
+        if (voices.length > 0) {
+            window.speechSynthesis.speak(utterance);
+        } else {
+            // Some devices need a moment or an event to load voices
+            window.speechSynthesis.onvoiceschanged = () => {
+                window.speechSynthesis.onvoiceschanged = null;
+                window.speechSynthesis.speak(utterance);
+            };
+        }
     }
 
     requestNextPage() {
