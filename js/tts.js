@@ -191,10 +191,22 @@ class ZenTTS {
         const text = this.chunks[this.chunkIndex];
         const sid = ++this.sessionId;
         window.speechSynthesis.cancel();
+        
+        // 1. Replace commas, semicolons, and periods with spaces
+        let cleanText = text.replace(/[,，、;；.。]/g, ' ');
+        
+        // 2. Remove other punctuation
+        try {
+            const puncReg = new RegExp('[\\p{P}\\p{S}]', 'gu');
+            cleanText = cleanText.replace(puncReg, '');
+        } catch (e) {
+            // Fallback if browser doesn't support unicode property escapes
+            cleanText = cleanText.replace(/[!?'"()[\]{}<>\-=_+*&^%$#@~`\\/|！？「」『』（）〔〕【】《》〈〉～—…・]/g, '');
+        }
 
-        const utterance = new SpeechSynthesisUtterance(text);
+        const utterance = new SpeechSynthesisUtterance(cleanText);
         utterance.rate = this.app.ttsSpeed || 1.0;
-        utterance.lang = /[\u4e00-\u9fa5]/.test(text) ? 'zh-TW' : 'en-US';
+        utterance.lang = /[\u4e00-\u9fa5]/.test(cleanText) ? 'zh-TW' : 'en-US';
 
         utterance.onstart = () => {
             console.log("TTS started:", text.substring(0, 20));
