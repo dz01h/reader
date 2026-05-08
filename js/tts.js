@@ -165,9 +165,14 @@ class ZenTTS {
 
         const voices = window.speechSynthesis.getVoices();
         if (voices.length === 0) {
-            this.app.showToast("Warning: No TTS voices detected. Check system settings.");
+            this.app.showToast("語音引擎載入中...");
+            setTimeout(() => {
+                if (this.isPlaying && window.speechSynthesis.getVoices().length === 0) {
+                    this.app.showToast("警告：未偵測到系統語音，請確認已安裝或啟用 TTS 引擎。");
+                }
+            }, 3000);
         } else {
-            this.app.showToast("TTS Starting...");
+            this.app.showToast("TTS 開始撥放...");
         }
 
         this.chunkIndex = 0;
@@ -214,23 +219,30 @@ class ZenTTS {
 
         this.updateMediaMetadata(text);
         
-        // Debug info for Android (also show as toast if it's the very first attempt)
         const voices = window.speechSynthesis.getVoices();
         if (sid === 1) { 
             console.log("Available voices:", voices.length);
-            if (voices.length === 0) {
-                this.app.showToast("No voices loaded yet. Retrying...");
-            }
         }
 
         if (voices.length > 0) {
             window.speechSynthesis.speak(utterance);
         } else {
             // Some devices need a moment or an event to load voices
-            window.speechSynthesis.onvoiceschanged = () => {
-                window.speechSynthesis.onvoiceschanged = null;
-                window.speechSynthesis.speak(utterance);
+            let hasSpoken = false;
+            
+            const speakNow = () => {
+                if (!hasSpoken && this.isPlaying && sid === this.sessionId) {
+                    hasSpoken = true;
+                    window.speechSynthesis.onvoiceschanged = null;
+                    window.speechSynthesis.speak(utterance);
+                }
             };
+            
+            window.speechSynthesis.onvoiceschanged = speakNow;
+            
+            // Android WebView sometimes never fires onvoiceschanged until you actually try to speak.
+            // Give it a short delay and force speak to trigger the engine.
+            setTimeout(speakNow, 800);
         }
     }
 
