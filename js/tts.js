@@ -199,8 +199,7 @@ class ZenTTS {
                 console.warn("AudioContext heartbeat failed", e);
             }
         }
-        }
-
+        
         // Try to request a screen wake lock if supported
         if ('wakeLock' in navigator) {
             navigator.wakeLock.request('screen').catch(err => {
