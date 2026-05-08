@@ -192,13 +192,13 @@ class ZenTTS {
         const sid = ++this.sessionId;
         window.speechSynthesis.cancel();
         
-        // 1. Replace commas, semicolons, and periods with spaces
-        let cleanText = text.replace(/[,，、;；.。]/g, ' ');
+        let cleanText = text;
         
-        // 2. Remove other punctuation
+        // Remove punctuation, but keep specific ones for natural pausing
+        const keepPunc = /[,，、;；.。]/;
         try {
             const puncReg = new RegExp('[\\p{P}\\p{S}]', 'gu');
-            cleanText = cleanText.replace(puncReg, '');
+            cleanText = cleanText.replace(puncReg, match => keepPunc.test(match) ? match : '');
         } catch (e) {
             // Fallback if browser doesn't support unicode property escapes
             cleanText = cleanText.replace(/[!?'"()[\]{}<>\-=_+*&^%$#@~`\\/|！？「」『』（）〔〕【】《》〈〉～—…・]/g, '');
