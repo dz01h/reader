@@ -1,7 +1,7 @@
 class ZenTTS {
     constructor(app) {
         this.app = app;
-        
+
         // State
         this.isPlaying = false;
         this.sessionId = 0;
@@ -9,7 +9,7 @@ class ZenTTS {
         this.chunks = [];
         this.chunkIndex = 0;
         this.isWaitingForNextPage = false;
-        
+
         this.initDOM();
         this.bindEvents();
     }
@@ -28,7 +28,7 @@ class ZenTTS {
         // Background Keep-Alive Audio
         this.silentAudio = new Audio();
         this.silentAudio.loop = true;
-        
+
         try {
             const b64 = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAAwAAAbAAqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV////////////////////////////////////////////AAAAAExhdmM1OC4xMwAAAAAAAAAAAAAAACQDkAAAAAAAAAGw9wrNaQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/+MYxAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxDsAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxHYAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
             const binary = atob(b64);
@@ -45,7 +45,7 @@ class ZenTTS {
             this.silentAudio.src = "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAAwAAAbAAqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV////////////////////////////////////////////AAAAAExhdmM1OC4xMwAAAAAAAAAAAAAAACQDkAAAAAAAAAGw9wrNaQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/+MYxAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxDsAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxHYAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
             this.silentAudio.load();
         }
-        
+
         this.initMediaSession();
     }
 
@@ -90,20 +90,20 @@ class ZenTTS {
             if (this.currentText !== newText) {
                 // Remember the last read chunk to handle overlap
                 const lastFinishedChunk = this.chunks[this.chunkIndex - 1];
-                
+
                 this.currentText = newText;
                 this.prepareChunks();
-                
-                // Reset progress and restart if playing
+
+                // Always update chunkIndex when text changes to point to the start of new text
+                if (lastFinishedChunk && lastFinishedChunk.endsWith(this.chunks[0])) {
+                    this.chunkIndex = 1;
+                } else {
+                    this.chunkIndex = 0;
+                }
+
+                // Restart if already playing
                 if (this.isPlaying) {
                     this.isWaitingForNextPage = false;
-                    
-                    // If the first chunk of the new page is exactly the same as the last chunk we read, skip it.
-                    if (lastFinishedChunk && this.chunks[0] === lastFinishedChunk) {
-                        this.chunkIndex = 1;
-                    } else {
-                        this.chunkIndex = 0;
-                    }
                     this.readCurrentChunk();
                 }
             }
@@ -141,9 +141,9 @@ class ZenTTS {
     start() {
         if (!this.currentText) {
             // If no text, maybe we just opened the book, trigger a render to get text
-            this.app.readingPanel.render(); 
+            this.app.readingPanel.render();
         }
-        
+
         this.sessionId++;
         window.speechSynthesis.cancel();
         this.isPlaying = true;
@@ -175,7 +175,6 @@ class ZenTTS {
             this.app.showToast("TTS 開始撥放...");
         }
 
-        this.chunkIndex = 0;
         this.readCurrentChunk();
     }
 
@@ -191,14 +190,14 @@ class ZenTTS {
         const text = this.chunks[this.chunkIndex];
         const sid = ++this.sessionId;
         window.speechSynthesis.cancel();
-        
+
         let cleanText = text;
-        
+
         // Remove punctuation, but keep specific ones for natural pausing
-        const keepPunc = /[,，、;；.。]/;
+        const keepPunc = /[,，、;；.：:。]/;
         try {
             const puncReg = new RegExp('[\\p{P}\\p{S}]', 'gu');
-            cleanText = cleanText.replace(puncReg, match => keepPunc.test(match) ? match : '');
+            cleanText = cleanText.replace(puncReg, match => keepPunc.test(match) ? match : '').trim();
         } catch (e) {
             // Fallback if browser doesn't support unicode property escapes
             cleanText = cleanText.replace(/[!?'"()[\]{}<>\-=_+*&^%$#@~`\\/|！？「」『』（）〔〕【】《》〈〉～—…・]/g, '');
@@ -230,9 +229,9 @@ class ZenTTS {
         };
 
         this.updateMediaMetadata(text);
-        
+
         const voices = window.speechSynthesis.getVoices();
-        if (sid === 1) { 
+        if (sid === 1) {
             console.log("Available voices:", voices.length);
         }
 
@@ -241,7 +240,7 @@ class ZenTTS {
         } else {
             // Some devices need a moment or an event to load voices
             let hasSpoken = false;
-            
+
             const speakNow = () => {
                 if (!hasSpoken && this.isPlaying && sid === this.sessionId) {
                     hasSpoken = true;
@@ -249,9 +248,9 @@ class ZenTTS {
                     window.speechSynthesis.speak(utterance);
                 }
             };
-            
+
             window.speechSynthesis.onvoiceschanged = speakNow;
-            
+
             // Android WebView sometimes never fires onvoiceschanged until you actually try to speak.
             // Give it a short delay and force speak to trigger the engine.
             setTimeout(speakNow, 800);
