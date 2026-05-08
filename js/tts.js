@@ -38,13 +38,25 @@ class ZenTTS {
             }
             const blob = new Blob([array], {type: 'audio/mpeg'});
             this.silentAudio.src = URL.createObjectURL(blob);
+            this.silentAudio.volume = 0.01; // Low volume instead of muted
+            this.silentAudio.style.display = 'none';
+            document.body.appendChild(this.silentAudio);
             this.silentAudio.load();
         } catch(e) {
             console.error("Failed to create Blob URL for silent audio", e);
             // Fallback to data URI if Blob fails
             this.silentAudio.src = "data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAAwAAAbAAqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV////////////////////////////////////////////AAAAAExhdmM1OC4xMwAAAAAAAAAAAAAAACQDkAAAAAAAAAGw9wrNaQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/+MYxAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxDsAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxHYAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
+            this.silentAudio.volume = 0.01;
+            document.body.appendChild(this.silentAudio);
             this.silentAudio.load();
         }
+
+        // Heartbeat to keep TTS alive on Android
+        setInterval(() => {
+            if (this.isPlaying && window.speechSynthesis.paused) {
+                window.speechSynthesis.resume();
+            }
+        }, 5000);
 
         this.initMediaSession();
     }
@@ -167,6 +179,26 @@ class ZenTTS {
                     this.app.showToast(`音訊啟動失敗: ${errDetails}`);
                 }
             });
+
+            // Start an oscillator to keep AudioContext active
+            try {
+                if (!this.audioCtx) {
+                    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+                if (this.audioCtx.state === 'suspended') {
+                    this.audioCtx.resume();
+                }
+                const osc = this.audioCtx.createOscillator();
+                const gain = this.audioCtx.createGain();
+                gain.gain.value = 0.001; 
+                osc.connect(gain);
+                gain.connect(this.audioCtx.destination);
+                osc.start();
+                setTimeout(() => osc.stop(), 100); // Tiny blip to wake up context
+            } catch (e) {
+                console.warn("AudioContext heartbeat failed", e);
+            }
+        }
         }
 
         // Try to request a screen wake lock if supported
