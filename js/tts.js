@@ -53,6 +53,12 @@ class ZenTTS {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.setActionHandler('play', () => this.start());
             navigator.mediaSession.setActionHandler('pause', () => this.stop());
+            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'prevPage' } }));
+            });
+            navigator.mediaSession.setActionHandler('nexttrack', () => {
+                document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'nextPage' } }));
+            });
         }
     }
 
@@ -160,6 +166,13 @@ class ZenTTS {
                 } else {
                     this.app.showToast(`音訊啟動失敗: ${errDetails}`);
                 }
+            });
+        }
+
+        // Try to request a screen wake lock if supported
+        if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen').catch(err => {
+                console.warn("Wake lock failed:", err.message);
             });
         }
 
