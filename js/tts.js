@@ -55,6 +55,16 @@ class ZenTTS {
             this.silentAudio.style.display = 'none';
             document.body.appendChild(this.silentAudio);
             this.silentAudio.load();
+            
+            this.silentAudio.onplay = () => this.debugLog("Keep-alive audio started playing");
+            this.silentAudio.onpause = () => {
+                this.debugLog("Keep-alive audio paused");
+                if (this.isPlaying) {
+                    this.debugLog("Attempting to resume keep-alive audio...");
+                    this.silentAudio.play().catch(e => this.debugLog(`Resume failed: ${e.message}`));
+                }
+            };
+            this.silentAudio.onerror = (e) => this.debugLog(`Keep-alive audio error: ${this.silentAudio.error?.message}`);
         } catch(e) {
             console.error("Failed to create Blob URL for silent audio", e);
             // Fallback to data URI if Blob fails
@@ -194,43 +204,17 @@ class ZenTTS {
         if (this.els.icon) this.els.icon.textContent = '⏸';
 
         if (this.silentAudio) {
-            this.silentAudio.play().catch(e => {
-                console.warn("Silent audio playback failed:", e);
-                let errDetails = `${e.name}: ${e.message}`;
-                // If it's just a playback block, we can still try to proceed with TTS
-                if (e.name === 'NotAllowedError') {
-                    this.app.showToast(`TTS: 點擊螢幕允許音訊 (${errDetails})`);
-                } else {
-                    this.app.showToast(`音訊啟動失敗: ${errDetails}`);
-                }
+            this.silentAudio.currentTime = 0;
+            this.silentAudio.play().then(() => {
+                this.debugLog("Keep-alive audio play successful");
+            }).catch(e => {
+                this.debugLog(`Keep-alive audio blocked: ${e.message}`);
+                this.app.showToast(`請點擊螢幕授權音訊播放`);
             });
-
-            // Start an oscillator to keep AudioContext active
-            try {
-                if (!this.audioCtx) {
-                    this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                }
-                if (this.audioCtx.state === 'suspended') {
-                    this.audioCtx.resume();
-                }
-                const osc = this.audioCtx.createOscillator();
-                const gain = this.audioCtx.createGain();
-                gain.gain.value = 0.001; 
-                osc.connect(gain);
-                gain.connect(this.audioCtx.destination);
-                osc.start();
-                setTimeout(() => osc.stop(), 100); // Tiny blip to wake up context
-            } catch (e) {
-                console.warn("AudioContext heartbeat failed", e);
-            }
         }
         
-        // Try to request a screen wake lock if supported
-        if ('wakeLock' in navigator) {
-            navigator.wakeLock.request('screen').catch(err => {
-                console.warn("Wake lock failed:", err.message);
-            });
-        }
+        // Re-request wake lock
+        this.requestWakeLock();
 
         const voices = window.speechSynthesis.getVoices();
         if (voices.length === 0) {
