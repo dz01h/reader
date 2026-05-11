@@ -231,6 +231,20 @@ class ZenTTS {
         this.readCurrentChunk();
     }
 
+    async requestWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                this.wakeLock = await navigator.wakeLock.request('screen');
+                this.debugLog("Screen Wake Lock active");
+                this.wakeLock.addEventListener('release', () => {
+                    this.debugLog("Screen Wake Lock released");
+                });
+            } catch (err) {
+                this.debugLog(`Wake Lock failed: ${err.message}`);
+            }
+        }
+    }
+
     readCurrentChunk() {
         if (!this.isPlaying || this.chunkIndex >= this.chunks.length) {
             if (this.isPlaying && this.chunkIndex >= this.chunks.length) {
