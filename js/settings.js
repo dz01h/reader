@@ -37,6 +37,12 @@ class ZenSettings {
         this.syncCooldownSelect = document.getElementById('setting-sync-cooldown');
         this.qrContainer = document.getElementById('qr-container');
         this.qrCodeEl = document.getElementById('qr-code');
+
+        this.btnShowDebug = document.getElementById('btn-show-debug');
+        this.debugDialog = document.getElementById('debug-log-dialog');
+        this.debugContent = document.getElementById('debug-log-content');
+        this.btnCloseDebug = document.getElementById('btn-close-debug-log');
+        this.btnClearDebug = document.getElementById('btn-clear-debug-log');
     }
 
     syncUI() {
@@ -173,6 +179,26 @@ class ZenSettings {
 
         if (this.btnSyncQr) {
             this.btnSyncQr.addEventListener('click', (e) => this.generateSyncQR(e));
+        }
+
+        if (this.btnShowDebug) {
+            this.btnShowDebug.addEventListener('click', () => {
+                const logs = JSON.parse(localStorage.getItem('zen_tts_debug_log') || '[]');
+                this.debugContent.textContent = logs.join('\n');
+                this.debugDialog.showModal();
+            });
+        }
+
+        if (this.btnCloseDebug) {
+            this.btnCloseDebug.addEventListener('click', () => this.debugDialog.close());
+        }
+
+        if (this.btnClearDebug) {
+            this.btnClearDebug.addEventListener('click', () => {
+                localStorage.removeItem('zen_tts_debug_log');
+                this.debugContent.textContent = '';
+                this.app.showToast('紀錄已清除');
+            });
         }
 
         // Transparency during slider interaction

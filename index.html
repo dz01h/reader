@@ -234,6 +234,7 @@
                 <div class="setting-group">
                     <button id="btn-sync-qr" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnSyncQr">產生同步 QR Code</button>
                     <button id="btn-gas-auth" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnGasAuth">重新授權 Google 權限</button>
+                    <button id="btn-show-debug" class="btn-primary" style="width:100%; margin-top: 0.5rem;">顯示 TTS 除錯紀錄</button>
                 </div>
                 
                 <div id="qr-container" class="hidden" style="margin-top: 1rem; text-align: center; background: white; padding: 1rem; border-radius: 8px;">
@@ -241,6 +242,17 @@
                     <p style="color: black; font-size: 0.8rem; margin-top: 0.5rem; font-weight: bold;">使用手機掃描以上 QR Code 即可自動同步設定</p>
                 </div>
             </fieldset>
+        </div>
+    </dialog>
+
+    <dialog id="debug-log-dialog" class="settings-dialog">
+        <div class="settings-header">
+            <h2 id="debug-log-title">TTS Debug Log</h2>
+            <button id="btn-close-debug-log" class="icon-btn">✕</button>
+        </div>
+        <div class="settings-body">
+            <pre id="debug-log-content" style="font-size: 0.8rem; background: #222; color: #0f0; padding: 1rem; overflow-x: auto; white-space: pre-wrap; height: 300px;"></pre>
+            <button id="btn-clear-debug-log" class="btn-primary" style="width: 100%; margin-top: 1rem;">清除紀錄</button>
         </div>
     </dialog>
 

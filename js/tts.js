@@ -12,6 +12,19 @@ class ZenTTS {
 
         this.initDOM();
         this.bindEvents();
+        this.debugLog("TTS initialized");
+    }
+
+    debugLog(msg) {
+        const timestamp = new Date().toLocaleTimeString();
+        const fullMsg = `[${timestamp}] ${msg}`;
+        console.log(fullMsg);
+        
+        // Save to a rotating log in localStorage for user retrieval
+        let logs = JSON.parse(localStorage.getItem('zen_tts_debug_log') || '[]');
+        logs.push(fullMsg);
+        if (logs.length > 50) logs.shift();
+        localStorage.setItem('zen_tts_debug_log', JSON.stringify(logs));
     }
 
     initDOM() {
@@ -51,12 +64,18 @@ class ZenTTS {
             this.silentAudio.load();
         }
 
-        // Heartbeat to keep TTS alive on Android
+        // Heartbeat to keep TTS alive on Android and log status
         setInterval(() => {
-            if (this.isPlaying && window.speechSynthesis.paused) {
-                window.speechSynthesis.resume();
+            if (this.isPlaying) {
+                const isPaused = window.speechSynthesis.paused;
+                const isSpeaking = window.speechSynthesis.speaking;
+                this.debugLog(`Heartbeat: isPlaying=true, speaking=${isSpeaking}, paused=${isPaused}`);
+                
+                if (isPaused) {
+                    window.speechSynthesis.resume();
+                }
             }
-        }, 5000);
+        }, 10000); // Every 10 seconds to avoid flooding
 
         this.initMediaSession();
     }
@@ -101,6 +120,10 @@ class ZenTTS {
                 }
             });
         }
+
+        document.addEventListener('visibilitychange', () => {
+            this.debugLog(`Visibility changed: ${document.visibilityState}`);
+        });
 
         // Listen for visible text from ReadingPanel
         document.body.addEventListener('ReadingOver', (e) => {
@@ -149,6 +172,7 @@ class ZenTTS {
     stop() {
         this.isPlaying = false;
         this.sessionId++;
+        this.debugLog("TTS Stopped");
         if (this.els.icon) this.els.icon.textContent = '▶';
         window.speechSynthesis.cancel();
 
@@ -166,6 +190,7 @@ class ZenTTS {
         window.speechSynthesis.cancel();
         this.isPlaying = true;
         this.isWaitingForNextPage = false;
+        this.debugLog("TTS Started");
         if (this.els.icon) this.els.icon.textContent = '⏸';
 
         if (this.silentAudio) {
@@ -252,16 +277,21 @@ class ZenTTS {
         utterance.lang = /[\u4e00-\u9fa5]/.test(cleanText) ? 'zh-TW' : 'en-US';
 
         utterance.onstart = () => {
-            console.log("TTS started:", text.substring(0, 20));
+            this.debugLog(`Utterance start: ${cleanText.substring(0, 10)}...`);
         };
 
         utterance.onend = () => {
+            this.debugLog(`Utterance end: sid=${sid}, current=${this.sessionId}`);
             if (sid !== this.sessionId || !this.isPlaying) return;
             this.chunkIndex++;
             setTimeout(() => this.readCurrentChunk(), 50);
         };
 
+        utterance.onpause = () => this.debugLog("Utterance paused by system");
+        utterance.onresume = () => this.debugLog("Utterance resumed by system");
+
         utterance.onerror = (e) => {
+            this.debugLog(`Utterance error: ${e.error}`);
             if (sid !== this.sessionId) return;
             if (e.error === 'interrupted') {
                 console.log("TTS interrupted (normal)");
