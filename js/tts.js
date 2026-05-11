@@ -110,7 +110,7 @@ class ZenTTS {
                 artist: 'Zen Reader TTS',
                 album: chunkText || this.currentText.substring(0, 50) + '...',
                 artwork: [
-                    { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' }
+                    { src: 'icon.svg', sizes: '512x512', type: 'image/svg+xml' }
                 ]
             });
             navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : 'paused';
