@@ -502,6 +502,7 @@ class ZenReaderApp {
                 this.readingLog.resetInit();
             }
         });
+        window.addEventListener('focus', () => this.checkAndSyncCloudProgress());
         window.addEventListener('online', () => this.checkAndSyncCloudProgress());
     }
 }
