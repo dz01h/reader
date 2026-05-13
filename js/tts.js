@@ -18,10 +18,11 @@ class ZenTTS {
         // Queue State
         this.synthesisQueue = new Map(); // chunkIndex -> Blob
         this.isSynthesizing = false;
+        this.heartbeatInterval = null;
 
         this.initDOM();
         this.bindEvents();
-        this.debugLog("TTS initialized (Offline Engine with Queuing ready)");
+        this.debugLog("TTS initialized (Offline Engine with Background Keep-Alive ready)");
     }
 
     debugLog(msg) {
@@ -108,7 +109,8 @@ class ZenTTS {
     }
 
     prepareChunks() {
-        this.chunks = this.currentText.split(/([。！？\n])/).reduce((acc, part, i) => {
+        // Updated regex to split on more punctuation for better intonation
+        this.chunks = this.currentText.split(/([。！？\n，、；：])/).reduce((acc, part, i) => {
             if (i % 2 === 0) { if (part) acc.push(part); }
             else { if (acc.length > 0) acc[acc.length - 1] += part; else if (part) acc.push(part); }
             return acc;
@@ -137,6 +139,10 @@ class ZenTTS {
     stop() {
         this.isPlaying = false;
         this.sessionId++;
+        if (this.heartbeatInterval) {
+            clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
+        }
         if (this.els.icon) this.els.icon.textContent = '▶';
         if (this.currentAudio) {
             this.currentAudio.pause();
@@ -156,7 +162,18 @@ class ZenTTS {
         if (this.els.icon) this.els.icon.textContent = '⏸';
         if (this.silentAudio) this.silentAudio.play().catch(() => {});
         this.requestWakeLock();
+        this.startHeartbeat();
         this.readCurrentChunk();
+    }
+
+    startHeartbeat() {
+        if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+        this.heartbeatInterval = setInterval(() => {
+            if (this.isPlaying) {
+                // Keep JS active and refill queue
+                this.fillQueue(this.sessionId);
+            }
+        }, 1000);
     }
 
     async readCurrentChunk() {
@@ -167,15 +184,13 @@ class ZenTTS {
 
         const sid = this.sessionId;
 
-        // Check if already in queue
         if (this.synthesisQueue.has(this.chunkIndex)) {
             const blob = this.synthesisQueue.get(this.chunkIndex);
-            this.synthesisQueue.delete(this.chunkIndex); // Free memory
+            this.synthesisQueue.delete(this.chunkIndex); 
             this.playAudioBlob(blob, sid);
             return;
         }
 
-        // If not in queue, synthesize now
         const blob = await this.synthesizeChunk(this.chunkIndex, sid);
         if (blob && sid === this.sessionId && this.isPlaying) {
             this.playAudioBlob(blob, sid);
@@ -212,8 +227,8 @@ class ZenTTS {
         this.isSynthesizing = true;
 
         try {
-            // Look ahead 2 chunks
-            for (let i = 1; i <= 2; i++) {
+            // Increased look-ahead to 5 chunks for better background resilience
+            for (let i = 1; i <= 5; i++) {
                 const nextIdx = this.chunkIndex + i;
                 if (nextIdx < this.chunks.length && !this.synthesisQueue.has(nextIdx)) {
                     this.debugLog(`Pre-synthesizing chunk ${nextIdx}`);
@@ -242,7 +257,6 @@ class ZenTTS {
         this.currentAudio.playbackRate = this.app.ttsSpeed || 1.0;
         
         this.currentAudio.onplay = () => {
-            // Start filling queue for next chunks as soon as playback starts
             this.fillQueue(sid);
         };
 
