@@ -8,6 +8,7 @@ class ZenReaderApp {
         this.margins = { top: 30, bottom: 30, left: 30, right: 30 };
         this.currentBook = null;
         this.ttsSpeed = 1.0;
+        this.ttsVoice = 'zh_CN-huayan-medium';
         
         // Touch Quadrants
         this.quadTL = 'prev';
@@ -121,6 +122,7 @@ class ZenReaderApp {
                     this.ttsSpeed = state.ttsSpeed;
                     if (this.els.ttsSpeed) this.els.ttsSpeed.value = this.ttsSpeed;
                 }
+                if (state.ttsVoice) this.ttsVoice = state.ttsVoice;
                 
                 if (state.quadTL) this.quadTL = state.quadTL;
                 if (state.quadTR) this.quadTR = state.quadTR;
@@ -190,10 +192,7 @@ class ZenReaderApp {
     }
 
     onScroll(scrollOffset, maxScroll) {
-
-        if (this.tts) {
-            this.tts.checkVisibility();
-        }
+        // TTS visibility check is now handled via the 'ReadingOver' event in tts.js
     }
 
     applyLayoutChange() {
@@ -441,9 +440,19 @@ class ZenReaderApp {
         if (this.i18n && this.i18n.setLanguage(langCode)) this.saveState({ lang: langCode });
     }
 
-    setTTSSpeed(speed) {
-        this.ttsSpeed = parseFloat(speed);
+    setTTSSpeed(val) {
+        this.ttsSpeed = parseFloat(val);
         this.saveState({ ttsSpeed: this.ttsSpeed });
+    }
+
+    setTTSVoice(val) {
+        this.ttsVoice = val;
+        this.saveState({ ttsVoice: this.ttsVoice });
+        if (this.tts && this.tts.isPlaying) {
+            // Restart TTS to use new voice
+            this.tts.stop();
+            this.tts.start();
+        }
     }
 
     setQuad(quad, action) {
