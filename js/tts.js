@@ -278,7 +278,7 @@ class ZenTTS {
             
             // Play a silent background track to keep OS awake and enable MediaSession
             this.audioPlayer.loop = true;
-            this.audioPlayer.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
+            this.audioPlayer.src = this._createSilentAudioURL(15);
 
         }
         if (this.audioCtx.state === 'suspended') {
@@ -313,6 +313,40 @@ class ZenTTS {
                 console.error(`decodeAudioData error: ${e.message}`);
             }
         });
+    }
+
+    _createSilentAudioURL(seconds) {
+        const sampleRate = 8000;
+        const numChannels = 1;
+        const bitsPerSample = 16;
+        const blockAlign = numChannels * (bitsPerSample / 8);
+        const byteRate = sampleRate * blockAlign;
+        const dataSize = seconds * byteRate;
+        const buffer = new ArrayBuffer(44 + dataSize);
+        const view = new DataView(buffer);
+
+        const writeString = (offset, string) => {
+            for (let i = 0; i < string.length; i++) {
+                view.setUint8(offset + i, string.charCodeAt(i));
+            }
+        };
+
+        writeString(0, 'RIFF');
+        view.setUint32(4, 36 + dataSize, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); // PCM
+        view.setUint16(22, numChannels, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, byteRate, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, bitsPerSample, true);
+        writeString(36, 'data');
+        view.setUint32(40, dataSize, true);
+
+        const blob = new Blob([buffer], { type: 'audio/wav' });
+        return URL.createObjectURL(blob);
     }
 
     _scheduleBuffer(audioBuffer) {
