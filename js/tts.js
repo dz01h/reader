@@ -106,16 +106,17 @@ class ZenTTS {
         this.isWaitingForNextPage = false;
 
         this._pendingPlay = false;
-        this._bufferedChunks = 0;
-        this._PLAY_AFTER_CHUNKS = 1; // start play after N sentences buffered in SW
+        this._PLAY_AFTER_CHUNKS = 1; 
+
+        // Audio Context for gapless playback
+        this.audioCtx = null;
+        this.audioStreamDest = null;
+        this.nextStartTime = 0;
+        this._scheduledSources = [];
+        this._decodeChain = Promise.resolve();
 
         this.initDOM();
         this.bindEvents();
-        this.debugLog("TTS initialized (WorkerPool x2 + SW Proxy)");
-    }
-
-    debugLog(msg) {
-        console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
     }
 
     initDOM() {
@@ -133,37 +134,15 @@ class ZenTTS {
         this.pool = new TTSWorkerPool(2);
 
         this.pool.onData = (buffer, _unused, text) => {
-            console.log(`[MSE append] ${text}`);
-            this._appendToSourceBuffer(buffer);
+            this._appendToWavQueue(buffer);
         };
 
         this.pool.onChunkDone = (text) => {
             this._bufferedChunks++;
             this.updateMediaMetadata(text);
-            if (this._pendingPlay && this._bufferedChunks >= this._PLAY_AFTER_CHUNKS) {
-                this._pendingPlay = false;
-                this._startAudioPlayback();
-            }
         };
 
-        this.pool.onAllDone = () => {
-            this.debugLog("All chunks synthesized");
-            if (this._pendingPlay) {
-                this._pendingPlay = false;
-                this._startAudioPlayback();
-            }
-            // Only call endOfStream if data was actually appended (past HAVE_METADATA)
-            if (this._mediaSource && this._mediaSource.readyState === 'open' && this._hasAppendedData) {
-                const end = () => {
-                    try { this._mediaSource.endOfStream(); } catch(e){}
-                };
-                if (this._sourceBuffer && this._sourceBuffer.updating) {
-                    this._sourceBuffer.addEventListener('updateend', end, { once: true });
-                } else {
-                    end();
-                }
-            }
-        };
+        this.pool.onAllDone = () => {};
 
         // Audio player
         this.audioPlayer = new Audio();
@@ -171,55 +150,16 @@ class ZenTTS {
         this.audioPlayer.style.display = "none";
         document.body.appendChild(this.audioPlayer);
 
-        const log = (label, extra = '') => {
-            const t = this.audioPlayer.currentTime?.toFixed(2) ?? '?';
-            const buf = this.audioPlayer.buffered?.length
-                ? this.audioPlayer.buffered.end(this.audioPlayer.buffered.length - 1).toFixed(2)
-                : '?';
-            this.debugLog(`[audio] ${label} | t=${t}s buf=${buf}s ${extra}`);
-        };
-
-        this.audioPlayer.addEventListener('loadstart',      () => log('loadstart'));
-        this.audioPlayer.addEventListener('loadedmetadata', () => log('loadedmetadata'));
-        this.audioPlayer.addEventListener('canplay',        () => log('canplay'));
-        this.audioPlayer.addEventListener('canplaythrough', () => log('canplaythrough'));
-        this.audioPlayer.addEventListener('play',           () => log('play'));
-        this.audioPlayer.addEventListener('playing',        () => {
-            const gap = this._waitingSince ? `gap=${(performance.now() - this._waitingSince).toFixed(0)}ms` : '';
-            this._waitingSince = 0;
-            log('playing ▶', gap);
+        this.audioPlayer.addEventListener('ended', () => {
+            // With MediaStream, ended only fires if the stream is closed.
+            // We handle page transitions via the scheduler now.
         });
-        this.audioPlayer.addEventListener('waiting',        () => {
-            this._waitingSince = performance.now();
-            log('waiting ⏳');
-        });
-        this.audioPlayer.addEventListener('stalled',        () => log('stalled ⚠'));
-        this.audioPlayer.addEventListener('suspend',        () => log('suspend'));
-        this.audioPlayer.addEventListener('pause',          () => log('pause'));
-        this.audioPlayer.addEventListener('ended',          () => {
-            log('ended ⏹');
-            if (this.isPlaying) this.requestNextPage();
-        });
-        this.audioPlayer.addEventListener('error',          () => {
-            const code = this.audioPlayer.error?.code;
-            const msg = this.audioPlayer.error?.message || 'Unknown';
-            log(`error ❌ code=${code} ${msg}`);
+        this.audioPlayer.addEventListener('error', () => {
             if (this.isPlaying) {
                 this.app.showToast("音訊串流中斷，正在換頁...");
                 setTimeout(() => this.requestNextPage(), 800);
             }
         });
-
-        // Throttled timeupdate (every ~2s) to track playback position
-        let lastTimeLog = 0;
-        this.audioPlayer.addEventListener('timeupdate', () => {
-            const now = this.audioPlayer.currentTime;
-            if (now - lastTimeLog >= 2) {
-                lastTimeLog = now;
-                log('timeupdate');
-            }
-        });
-
 
         this.initMediaSession();
     }
@@ -269,10 +209,8 @@ class ZenTTS {
     }
 
     prepareChunks() {
-        const MIN_LEN = 60;
-
         // Split on all punctuation, keeping delimiter at end of each fragment
-        const fragments = this.currentText
+        this.chunks = this.currentText
             .split(/([\n，。、；：！？－—…])/)
             .reduce((acc, part, i) => {
                 if (i % 2 === 0) {
@@ -284,19 +222,6 @@ class ZenTTS {
                 return acc;
             }, [])
             .filter(s => s.trim().length > 0);
-
-        // Merge fragments until accumulated length >= MIN_LEN, then cut
-        const chunks = [];
-        let current = '';
-        for (const frag of fragments) {
-            current += frag;
-            if (current.length >= MIN_LEN) {
-                chunks.push(current);
-                current = '';
-            }
-        }
-        if (current) chunks.push(current); // flush remainder
-        this.chunks = chunks;
     }
 
     toggle() {
@@ -310,7 +235,7 @@ class ZenTTS {
         if (this.els.icon) this.els.icon.textContent = '▶';
 
         this.pool.clear();
-        this._teardownMediaSource();
+        this._clearAudioContext();
         this.audioPlayer.pause();
         this.updateMediaMetadata();
     }
@@ -324,100 +249,121 @@ class ZenTTS {
     }
 
     async playCurrentPage() {
-        this.debugLog(`Page: ${this.chunks.length} chunks → WorkerPool x${this.pool.size}`);
-
         this._bufferedChunks = 0;
         this._pendingPlay = true;
-        this._appendQueue = [];
-        this._appendBusy = false;
 
         this.pool.clear();
-        this._teardownMediaSource();
-        this._setupMediaSource();
+        this._setupAudioContext();
 
         this.audioPlayer.playbackRate = this.app.ttsSpeed || 1.0;
 
-        // Start parallel synthesis — audio will play once _PLAY_AFTER_CHUNKS chunks are ready
+        // Start parallel synthesis
         this.pool.enqueue(this.chunks, this.app.ttsVoice || 'zh_CN-huayan-medium');
         this.updateMediaMetadata(this.chunks[0]);
     }
 
-    _setupMediaSource() {
-        // MediaSource: browser is notified immediately on appendBuffer(), no polling
-        this._mediaSource = new MediaSource();
-        this._sourceBuffer = null;
-        this._appendQueue = [];
-        this._appendBusy = false;
+    _setupAudioContext() {
+        if (!this.audioCtx) {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Add compressor to prevent clipping
+            this.compressor = this.audioCtx.createDynamicsCompressor();
+            this.compressor.threshold.setValueAtTime(-1.0, this.audioCtx.currentTime);
+            this.compressor.knee.setValueAtTime(40, this.audioCtx.currentTime);
+            this.compressor.ratio.setValueAtTime(12, this.audioCtx.currentTime);
+            this.compressor.attack.setValueAtTime(0, this.audioCtx.currentTime);
+            this.compressor.release.setValueAtTime(0.25, this.audioCtx.currentTime);
 
-        this._mediaSource.addEventListener('sourceopen', () => {
-            this.debugLog('MediaSource opened');
-            this._sourceBuffer = this._mediaSource.addSourceBuffer('audio/mpeg');
-            this._sourceBuffer.addEventListener('updateend', () => {
-                this._appendBusy = false;
-                this._drainAppendQueue();
-            });
-            this._drainAppendQueue();
-        }, { once: true });
-
-        // Use srcObject if available (Chrome 108+) — more reliable than blob URL
-        if ('srcObject' in this.audioPlayer && MediaSource.isTypeSupported !== undefined) {
-            try {
-                this.audioPlayer.srcObject = this._mediaSource;
-            } catch(e) {
-                // Fallback to blob URL
-                this.audioPlayer.src = URL.createObjectURL(this._mediaSource);
-                this.audioPlayer.load();
-            }
-        } else {
-            this.audioPlayer.src = URL.createObjectURL(this._mediaSource);
-            this.audioPlayer.load(); // explicitly trigger resource selection → sourceopen
+            this.audioStreamDest = this.audioCtx.createMediaStreamDestination();
+            this.compressor.connect(this.audioStreamDest);
+            
+            this.audioPlayer.srcObject = this.audioStreamDest.stream;
         }
-    }
-
-    _teardownMediaSource() {
-        // Just pause and clear internal state.
-        // Setting audioPlayer.src to a new blob URL in _setupMediaSource()
-        // will automatically abort the old source — no need for load() here.
-        // (load() after removeAttribute was preventing sourceopen from firing)
-        this.audioPlayer.pause();
-        if (this._mediaSource && this.audioPlayer.src.startsWith('blob:')) {
-            URL.revokeObjectURL(this.audioPlayer.src);
+        if (this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
         }
-        this._mediaSource = null;
-        this._sourceBuffer = null;
-        this._appendQueue = [];
-        this._appendBusy = false;
-        this._hasAppendedData = false;
+        this.nextStartTime = this.audioCtx.currentTime + 0.2; // slightly more buffer
+        this._scheduledSources = [];
     }
 
-    _appendToSourceBuffer(buffer) {
-        this._hasAppendedData = true;
-        this._appendQueue.push(buffer);
-        this._drainAppendQueue();
-    }
-
-    _drainAppendQueue() {
-        if (this._appendBusy || !this._sourceBuffer || this._appendQueue.length === 0) return;
-        if (this._mediaSource?.readyState !== 'open') return;
-        if (this._sourceBuffer.updating) return;
-
-        this._appendBusy = true;
-        const next = this._appendQueue.shift();
-        try {
-            this._sourceBuffer.appendBuffer(next);
-        } catch(e) {
-            this.debugLog(`appendBuffer error: ${e.message}`);
-            this._appendBusy = false;
-        }
-    }
-
-    _startAudioPlayback() {
-        this.debugLog(`Starting playback (${this._bufferedChunks} chunk(s) buffered)`);
-        this.audioPlayer.play().catch(e => {
-            this.debugLog(`play() failed: ${e.message}`);
-            this.app.showToast(`音訊播放失敗: ${e.message}`);
-            this.stop();
+    _clearAudioContext() {
+        this._scheduledSources.forEach(s => {
+            try { s.stop(); } catch(e){}
+            s.disconnect();
         });
+        this._scheduledSources = [];
+        this._pendingPlay = false;
+        this._decodeChain = Promise.resolve();
+        if (this.audioCtx && this.audioCtx.state !== 'closed') {
+            // We don't close it, just suspend to reuse
+            this.audioCtx.suspend();
+        }
+    }
+
+    _appendToWavQueue(buffer) {
+        if (!this.audioCtx) return;
+
+        this._decodeChain = this._decodeChain.then(async () => {
+            try {
+                const audioBuffer = await this.audioCtx.decodeAudioData(buffer);
+                this._scheduleBuffer(audioBuffer);
+            } catch (e) {
+                console.error(`decodeAudioData error: ${e.message}`);
+            }
+        });
+    }
+
+    _scheduleBuffer(audioBuffer) {
+        if (!this.isPlaying || !this.audioCtx) return;
+
+        const source = this.audioCtx.createBufferSource();
+        source.buffer = audioBuffer;
+        source.playbackRate.value = this.app.ttsSpeed || 1.0;
+        
+        // Use a GainNode for a tiny fade-in/out to prevent clicks at boundaries
+        const gainNode = this.audioCtx.createGain();
+        source.connect(gainNode);
+        gainNode.connect(this.compressor);
+
+        const now = this.audioCtx.currentTime;
+        const start = Math.max(now, this.nextStartTime);
+        const duration = audioBuffer.duration / (this.app.ttsSpeed || 1.0);
+
+        // 5ms fade in/out
+        const fadeTime = 0.005;
+        gainNode.gain.setValueAtTime(0, start);
+        gainNode.gain.linearRampToValueAtTime(1, start + fadeTime);
+        gainNode.gain.setValueAtTime(1, start + duration - fadeTime);
+        gainNode.gain.linearRampToValueAtTime(0, start + duration);
+
+        source.start(start);
+        this._scheduledSources.push(source);
+
+        this.nextStartTime = start + duration;
+
+        // Handle end of page
+        source.onended = () => {
+            // Remove from list
+            this._scheduledSources = this._scheduledSources.filter(s => s !== source);
+            
+            // Check if this was the last chunk of the page
+            if (this._scheduledSources.length === 0 && 
+                this.pool.nextFlushIdx >= this.pool.totalChunks && 
+                this.pool.totalChunks > 0) {
+                
+                // Give a tiny buffer before next page
+                setTimeout(() => {
+                    if (this.isPlaying && this._scheduledSources.length === 0) {
+                        this.requestNextPage();
+                    }
+                }, 200);
+            }
+        };
+
+        if (this._pendingPlay) {
+            this._pendingPlay = false;
+            this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
+        }
     }
 
     requestNextPage() {
