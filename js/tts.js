@@ -337,8 +337,13 @@ class ZenTTS {
         if (this.audioCtx.state === 'suspended') {
             this.audioCtx.resume();
         }
-        this.nextStartTime = this.audioCtx.currentTime + 0.2; // slightly more buffer
-        this._scheduledSources = [];
+
+        // Only reset schedule if we are truly starting fresh or the schedule is in the past
+        const now = this.audioCtx.currentTime;
+        if (this.nextStartTime < now) {
+            this.nextStartTime = now + 0.1;
+            this._scheduledSources = [];
+        }
     }
 
     _clearAudioContext() {
@@ -348,6 +353,7 @@ class ZenTTS {
         });
         this._scheduledSources = [];
         this._decodeChain = Promise.resolve();
+        this.nextStartTime = 0;
         if (this.audioCtx && this.audioCtx.state !== 'closed') {
             // We don't close it, just suspend to reuse
             this.audioCtx.suspend();
@@ -426,26 +432,16 @@ class ZenTTS {
 
         source.start(start);
         this._scheduledSources.push(source);
-
         this.nextStartTime = start + duration;
 
-        // Handle end of page
+        // Pre-fetch next page text as soon as the last chunk is scheduled
+        if (this.pool.nextFlushIdx >= this.pool.totalChunks && this.pool.totalChunks > 0) {
+            this.requestNextPage();
+        }
+
+        // Handle end of page (cleanup list)
         source.onended = () => {
-            // Remove from list
             this._scheduledSources = this._scheduledSources.filter(s => s !== source);
-            
-            // Check if this was the last chunk of the page
-            if (this._scheduledSources.length === 0 && 
-                this.pool.nextFlushIdx >= this.pool.totalChunks && 
-                this.pool.totalChunks > 0) {
-                
-                // Give a tiny buffer before next page
-                setTimeout(() => {
-                    if (this.isPlaying && this._scheduledSources.length === 0) {
-                        this.requestNextPage();
-                    }
-                }, 200);
-            }
         };
     }
 
