@@ -202,8 +202,9 @@ class ZenTTS {
         document.body.addEventListener('ReadingOver', (e) => {
             const newText = e.detail.reading;
             if (this.currentText !== newText) {
+                const lastChunk = this.chunks.length > 0 ? this.chunks[this.chunks.length - 1] : "";
                 this.currentText = newText;
-                this.prepareChunks();
+                this.prepareChunks(lastChunk);
                 if (this.isPlaying) {
                     this.isWaitingForNextPage = false;
                     this.playCurrentPage();
@@ -212,7 +213,7 @@ class ZenTTS {
         });
     }
 
-    prepareChunks() {
+    prepareChunks(lastChunkOfPrevPage = "") {
         // Split on all punctuation, keeping delimiter at end of each fragment
         this.chunks = this.currentText
             .split(/([\n，。、；：！？－—…])/)
@@ -226,6 +227,19 @@ class ZenTTS {
                 return acc;
             }, [])
             .filter(s => s.trim().length > 0);
+
+        // 如果有上一頁最後一句，嘗試分割第一句以避免重複朗讀
+        if (lastChunkOfPrevPage && this.chunks.length > 0) {
+            const first = this.chunks[0];
+            if (first.includes(lastChunkOfPrevPage)) {
+                const remaining = first.split(lastChunkOfPrevPage).pop().trim();
+                if (remaining) {
+                    this.chunks[0] = remaining;
+                } else {
+                    this.chunks.shift();
+                }
+            }
+        }
     }
 
     toggle() {
