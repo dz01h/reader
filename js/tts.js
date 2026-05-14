@@ -104,6 +104,7 @@ class ZenTTS {
         this.currentText = "";
         this.chunks = [];
         this.isWaitingForNextPage = false;
+        this.isPaused = false;
         this._PLAY_AFTER_CHUNKS = 1; 
 
         // Audio Context for gapless playback
@@ -163,10 +164,16 @@ class ZenTTS {
 
     initMediaSession() {
         if ('mediaSession' in navigator) {
-            navigator.mediaSession.setActionHandler('play', () => this.start());
-            navigator.mediaSession.setActionHandler('pause', () => this.stop());
+            navigator.mediaSession.setActionHandler('play', () => {
+                if (this.isPaused) this.resume();
+                else this.start();
+            });
+            navigator.mediaSession.setActionHandler('pause', () => this.pause());
             navigator.mediaSession.setActionHandler('nexttrack', () => {
                 document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'nextPage' } }));
+            });
+            navigator.mediaSession.setActionHandler('previoustrack', () => {
+                document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'prevPage' } }));
             });
         }
     }
@@ -174,12 +181,12 @@ class ZenTTS {
     updateMediaMetadata(chunkText = "") {
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
-                title: this.app.els.documentTitle.textContent || 'Zen Reader',
+                title: this.app.els.documentTitle?.textContent || 'Zen Reader',
                 artist: 'Offline AI TTS',
                 album: chunkText || '合成中...',
                 artwork: [{ src: 'icon.svg', sizes: '512x512', type: 'image/svg+xml' }]
             });
-            navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : 'paused';
+            navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : (this.isPaused ? 'paused' : 'none');
         }
     }
 
@@ -222,13 +229,44 @@ class ZenTTS {
     }
 
     toggle() {
-        if (this.isPlaying) this.stop();
-        else this.start();
+        if (this.isPlaying) {
+            this.pause();
+        } else if (this.isPaused) {
+            this.resume();
+        } else {
+            this.start();
+        }
+    }
+
+    pause() {
+        if (!this.isPlaying) return;
+        this.isPlaying = false;
+        this.isPaused = true;
+        if (this.els.icon) this.els.icon.textContent = '▶';
+        
+        if (this.audioCtx && this.audioCtx.state === 'running') {
+            this.audioCtx.suspend();
+        }
+        this.audioPlayer.pause();
+        this.updateMediaMetadata();
+    }
+
+    resume() {
+        if (!this.isPaused) return;
+        this.isPlaying = true;
+        this.isPaused = false;
+        if (this.els.icon) this.els.icon.textContent = '⏸';
+        
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+            this.audioCtx.resume();
+        }
+        this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
+        this.updateMediaMetadata();
     }
 
     stop() {
         this.isPlaying = false;
-        this._pendingPlay = false;
+        this.isPaused = false;
         if (this.els.icon) this.els.icon.textContent = '▶';
 
         this.pool.clear();
@@ -240,6 +278,7 @@ class ZenTTS {
     async start() {
         if (!this.currentText) this.app.readingPanel.render();
         this.isPlaying = true;
+        this.isPaused = false;
         this.isWaitingForNextPage = false;
         if (this.els.icon) this.els.icon.textContent = '⏸';
         this.playCurrentPage();
