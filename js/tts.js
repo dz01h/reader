@@ -104,8 +104,6 @@ class ZenTTS {
         this.currentText = "";
         this.chunks = [];
         this.isWaitingForNextPage = false;
-
-        this._pendingPlay = false;
         this._PLAY_AFTER_CHUNKS = 1; 
 
         // Audio Context for gapless playback
@@ -249,10 +247,12 @@ class ZenTTS {
 
     async playCurrentPage() {
         this._bufferedChunks = 0;
-        this._pendingPlay = true;
 
         this.pool.clear();
         this._setupAudioContext();
+
+        // Play MUST be called synchronously here to capture the user gesture on mobile
+        this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
 
         this.audioPlayer.playbackRate = this.app.ttsSpeed || 1.0;
 
@@ -294,7 +294,6 @@ class ZenTTS {
             s.disconnect();
         });
         this._scheduledSources = [];
-        this._pendingPlay = false;
         this._decodeChain = Promise.resolve();
         if (this.audioCtx && this.audioCtx.state !== 'closed') {
             // We don't close it, just suspend to reuse
@@ -395,11 +394,6 @@ class ZenTTS {
                 }, 200);
             }
         };
-
-        if (this._pendingPlay) {
-            this._pendingPlay = false;
-            this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
-        }
     }
 
     requestNextPage() {
