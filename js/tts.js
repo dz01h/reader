@@ -1,43 +1,121 @@
+// ─── Worker Pool ──────────────────────────────────────────────────────────────
+// Manages N parallel VITS workers with ordered MP3 output.
+class TTSWorkerPool {
+    constructor(size = 2) {
+        this.size = size;
+        this.workers = [];
+        this.pendingQueue = [];   // { index, text, voiceId }
+        this.resultBuffer = {};   // index → Uint8Array
+        this.nextDispatchIdx = 0;
+        this.nextFlushIdx = 0;
+        this.totalChunks = 0;
+
+        // Callbacks set by ZenTTS
+        this.onData = null;       // (Uint8Array) → void
+        this.onChunkDone = null;  // (text) → void
+        this.onAllDone = null;    // () → void
+
+        for (let i = 0; i < size; i++) {
+            const w = new Worker('js/tts-worker.js', { type: 'module' });
+            w._busy = false;
+            w.postMessage({ type: 'INIT' });
+            w.onmessage = (e) => this._onWorkerMsg(w, e.data);
+            this.workers.push(w);
+        }
+    }
+
+    enqueue(chunks, voiceId) {
+        this.pendingQueue = chunks.map((text, i) => ({ index: i, text, voiceId }));
+        this.resultBuffer = {};
+        this.nextFlushIdx = 0;
+        this.totalChunks = chunks.length;
+        this._dispatch();
+    }
+
+    clear() {
+        this.pendingQueue = [];
+        this.resultBuffer = {};
+        this.nextFlushIdx = 0;
+        this.totalChunks = 0;
+        // Mark workers idle; in-flight results will be ignored by stale index check
+        this.workers.forEach(w => w._busy = false);
+        this._sessionId = (this._sessionId || 0) + 1;
+    }
+
+    _dispatch() {
+        for (const w of this.workers) {
+            if (!w._busy && this.pendingQueue.length > 0) {
+                const item = this.pendingQueue.shift();
+                w._busy = true;
+                w._sessionId = this._sessionId;
+                w.postMessage({ type: 'SYNTHESIZE', ...item, sessionId: this._sessionId });
+            }
+        }
+    }
+
+    _onWorkerMsg(worker, data) {
+        worker._busy = false;
+
+        if (data.sessionId !== undefined && data.sessionId !== this._sessionId) {
+            this._dispatch();
+            return;
+        }
+
+        if (data.type === 'DONE') {
+            this.resultBuffer[data.index] = {
+                buffer: data.buffer,
+                text: data.text
+            };
+            this._flush();
+        } else if (data.type === 'ERROR') {
+            this.resultBuffer[data.index] = { buffer: null, text: data.text || '' };
+            this._flush();
+        }
+
+        this._dispatch();
+    }
+
+    _flush() {
+        while (this.resultBuffer.hasOwnProperty(this.nextFlushIdx)) {
+            const item = this.resultBuffer[this.nextFlushIdx];
+            if (item.buffer && this.onData) {
+                this.onData(item.buffer, null, item.text);
+            }
+            if (this.onChunkDone) this.onChunkDone(item.text);
+            delete this.resultBuffer[this.nextFlushIdx];
+            this.nextFlushIdx++;
+        }
+
+        const allFlushed = this.nextFlushIdx >= this.totalChunks;
+        const allIdle = this.workers.every(w => !w._busy);
+        const queueEmpty = this.pendingQueue.length === 0;
+        if (allFlushed && allIdle && queueEmpty && this.totalChunks > 0) {
+            if (this.onAllDone) this.onAllDone();
+        }
+    }
+}
+
+// ─── ZenTTS ──────────────────────────────────────────────────────────────────
 class ZenTTS {
     constructor(app) {
         this.app = app;
 
-        // State
         this.isPlaying = false;
-        this.sessionId = 0;
         this.currentText = "";
         this.chunks = [];
-        this.chunkIndex = 0;
         this.isWaitingForNextPage = false;
-        
-        // Offline Engine State
-        this.engines = {}; 
-        this.converter = null;
-        this.isModelLoaded = false;
-        
-        // Web Audio State (for gapless playback)
-        this.audioCtx = null;
-        this.nextScheduleTime = 0;
-        
-        // Queue State
-        this.synthesisQueue = new Map(); // chunkIndex -> Blob
-        this.isSynthesizing = false;
-        this.heartbeatInterval = null;
+
+        this._pendingPlay = false;
+        this._bufferedChunks = 0;
+        this._PLAY_AFTER_CHUNKS = 1; // start play after N sentences buffered in SW
 
         this.initDOM();
         this.bindEvents();
-        this.debugLog("TTS initialized (Gapless Web Audio ready)");
+        this.debugLog("TTS initialized (WorkerPool x2 + SW Proxy)");
     }
 
     debugLog(msg) {
-        const timestamp = new Date().toLocaleTimeString();
-        const fullMsg = `[${timestamp}] ${msg}`;
-        console.log(fullMsg);
-        
-        let logs = JSON.parse(localStorage.getItem('zen_tts_debug_log') || '[]');
-        logs.push(fullMsg);
-        if (logs.length > 50) logs.shift();
-        localStorage.setItem('zen_tts_debug_log', JSON.stringify(logs));
+        console.log(`[${new Date().toLocaleTimeString()}] ${msg}`);
     }
 
     initDOM() {
@@ -51,22 +129,97 @@ class ZenTTS {
             this.els.speed.value = this.app.ttsSpeed;
         }
 
-        // Long Silent Audio (Master for Media Session)
-        // Using a 10-minute silent base to satisfy the "long audio" requirement for MediaSession panel
-        this.silentAudio = new Audio();
-        this.silentAudio.loop = true;
-        try {
-            // Generating a data URI for a longer silent MP3 (10 seconds base, will loop)
-            // This is a minimal valid silent MP3 frame repeated
-            const silentB64 = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA/+M4wAAAAAAAAAAAAEluZm8AAAAPAAAAAwAAAbAAqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV1dXV////////////////////////////////////////////AAAAAExhdmM1OC4xMwAAAAAAAAAAAAAAACQDkAAAAAAAAAGw9wrNaQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/+MYxAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxDsAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV/+MYxHYAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV";
-            const binary = atob(silentB64);
-            const array = new Uint8Array(binary.length);
-            for(let i = 0; i < binary.length; i++) array[i] = binary.charCodeAt(i);
-            const blob = new Blob([array], {type: 'audio/mpeg'});
-            this.silentAudio.src = URL.createObjectURL(blob);
-            this.silentAudio.volume = 0.001; // Extremely low but not muted to keep session alive
-            document.body.appendChild(this.silentAudio);
-        } catch(e) {}
+        // Worker pool: 2 parallel VITS workers
+        this.pool = new TTSWorkerPool(2);
+
+        this.pool.onData = (buffer, _unused, text) => {
+            console.log(`[MSE append] ${text}`);
+            this._appendToSourceBuffer(buffer);
+        };
+
+        this.pool.onChunkDone = (text) => {
+            this._bufferedChunks++;
+            this.updateMediaMetadata(text);
+            if (this._pendingPlay && this._bufferedChunks >= this._PLAY_AFTER_CHUNKS) {
+                this._pendingPlay = false;
+                this._startAudioPlayback();
+            }
+        };
+
+        this.pool.onAllDone = () => {
+            this.debugLog("All chunks synthesized");
+            if (this._pendingPlay) {
+                this._pendingPlay = false;
+                this._startAudioPlayback();
+            }
+            // Only call endOfStream if data was actually appended (past HAVE_METADATA)
+            if (this._mediaSource && this._mediaSource.readyState === 'open' && this._hasAppendedData) {
+                const end = () => {
+                    try { this._mediaSource.endOfStream(); } catch(e){}
+                };
+                if (this._sourceBuffer && this._sourceBuffer.updating) {
+                    this._sourceBuffer.addEventListener('updateend', end, { once: true });
+                } else {
+                    end();
+                }
+            }
+        };
+
+        // Audio player
+        this.audioPlayer = new Audio();
+        this.audioPlayer.id = "tts-master-player";
+        this.audioPlayer.style.display = "none";
+        document.body.appendChild(this.audioPlayer);
+
+        const log = (label, extra = '') => {
+            const t = this.audioPlayer.currentTime?.toFixed(2) ?? '?';
+            const buf = this.audioPlayer.buffered?.length
+                ? this.audioPlayer.buffered.end(this.audioPlayer.buffered.length - 1).toFixed(2)
+                : '?';
+            this.debugLog(`[audio] ${label} | t=${t}s buf=${buf}s ${extra}`);
+        };
+
+        this.audioPlayer.addEventListener('loadstart',      () => log('loadstart'));
+        this.audioPlayer.addEventListener('loadedmetadata', () => log('loadedmetadata'));
+        this.audioPlayer.addEventListener('canplay',        () => log('canplay'));
+        this.audioPlayer.addEventListener('canplaythrough', () => log('canplaythrough'));
+        this.audioPlayer.addEventListener('play',           () => log('play'));
+        this.audioPlayer.addEventListener('playing',        () => {
+            const gap = this._waitingSince ? `gap=${(performance.now() - this._waitingSince).toFixed(0)}ms` : '';
+            this._waitingSince = 0;
+            log('playing ▶', gap);
+        });
+        this.audioPlayer.addEventListener('waiting',        () => {
+            this._waitingSince = performance.now();
+            log('waiting ⏳');
+        });
+        this.audioPlayer.addEventListener('stalled',        () => log('stalled ⚠'));
+        this.audioPlayer.addEventListener('suspend',        () => log('suspend'));
+        this.audioPlayer.addEventListener('pause',          () => log('pause'));
+        this.audioPlayer.addEventListener('ended',          () => {
+            log('ended ⏹');
+            if (this.isPlaying) this.requestNextPage();
+        });
+        this.audioPlayer.addEventListener('error',          () => {
+            const code = this.audioPlayer.error?.code;
+            const msg = this.audioPlayer.error?.message || 'Unknown';
+            log(`error ❌ code=${code} ${msg}`);
+            if (this.isPlaying) {
+                this.app.showToast("音訊串流中斷，正在換頁...");
+                setTimeout(() => this.requestNextPage(), 800);
+            }
+        });
+
+        // Throttled timeupdate (every ~2s) to track playback position
+        let lastTimeLog = 0;
+        this.audioPlayer.addEventListener('timeupdate', () => {
+            const now = this.audioPlayer.currentTime;
+            if (now - lastTimeLog >= 2) {
+                lastTimeLog = now;
+                log('timeupdate');
+            }
+        });
+
 
         this.initMediaSession();
     }
@@ -86,7 +239,7 @@ class ZenTTS {
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: this.app.els.documentTitle.textContent || 'Zen Reader',
                 artist: 'Offline AI TTS',
-                album: chunkText || this.currentText.substring(0, 50) + '...',
+                album: chunkText || '合成中...',
                 artwork: [{ src: 'icon.svg', sizes: '512x512', type: 'image/svg+xml' }]
             });
             navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : 'paused';
@@ -97,7 +250,8 @@ class ZenTTS {
         if (this.els.btnToggle) this.els.btnToggle.addEventListener('click', () => this.toggle());
         if (this.els.speed) {
             this.els.speed.addEventListener('change', (e) => {
-                this.app.setTTSSpeed(e.target.value);
+                this.app.setTTSSpeed(parseFloat(e.target.value));
+                if (this.audioPlayer) this.audioPlayer.playbackRate = parseFloat(e.target.value);
             });
         }
 
@@ -106,36 +260,43 @@ class ZenTTS {
             if (this.currentText !== newText) {
                 this.currentText = newText;
                 this.prepareChunks();
-                this.chunkIndex = 0;
-                this.synthesisQueue.clear();
                 if (this.isPlaying) {
                     this.isWaitingForNextPage = false;
-                    this.readCurrentChunk();
+                    this.playCurrentPage();
                 }
             }
         });
     }
 
     prepareChunks() {
-        this.chunks = this.currentText.split(/([。！？\n，、；：])/).reduce((acc, part, i) => {
-            if (i % 2 === 0) { if (part) acc.push(part); }
-            else { if (acc.length > 0) acc[acc.length - 1] += part; else if (part) acc.push(part); }
-            return acc;
-        }, []).filter(s => s.trim().length > 0);
-    }
+        const MIN_LEN = 60;
 
-    async initEngine(lang) {
-        if (!window.VITSWeb) return null;
-        const modelMap = {
-            'zh-TW': this.app.ttsVoice || 'zh_CN-huayan-medium',
-            'en': 'en_US-hfc_female-medium',
-            'ja': 'ja_JP-jvnv-medium'
-        };
-        const modelId = modelMap[lang] || modelMap['en'];
-        if (lang === 'zh-TW' && !this.converter && window.OpenCC) {
-            this.converter = window.OpenCC.Converter({ from: 'tw', to: 'cn' });
+        // Split on all punctuation, keeping delimiter at end of each fragment
+        const fragments = this.currentText
+            .split(/([\n，。、；：！？－—…])/)
+            .reduce((acc, part, i) => {
+                if (i % 2 === 0) {
+                    if (part.trim()) acc.push(part);
+                } else {
+                    if (acc.length > 0) acc[acc.length - 1] += part;
+                    else if (part.trim()) acc.push(part);
+                }
+                return acc;
+            }, [])
+            .filter(s => s.trim().length > 0);
+
+        // Merge fragments until accumulated length >= MIN_LEN, then cut
+        const chunks = [];
+        let current = '';
+        for (const frag of fragments) {
+            current += frag;
+            if (current.length >= MIN_LEN) {
+                chunks.push(current);
+                current = '';
+            }
         }
-        return modelId;
+        if (current) chunks.push(current); // flush remainder
+        this.chunks = chunks;
     }
 
     toggle() {
@@ -145,172 +306,126 @@ class ZenTTS {
 
     stop() {
         this.isPlaying = false;
-        this.sessionId++;
-        if (this.heartbeatInterval) {
-            clearInterval(this.heartbeatInterval);
-            this.heartbeatInterval = null;
-        }
+        this._pendingPlay = false;
         if (this.els.icon) this.els.icon.textContent = '▶';
-        
-        if (this.audioCtx) {
-            this.audioCtx.close().catch(() => {});
-            this.audioCtx = null;
-        }
-        
-        this.synthesisQueue.clear();
-        if (this.silentAudio) this.silentAudio.pause();
+
+        this.pool.clear();
+        this._teardownMediaSource();
+        this.audioPlayer.pause();
         this.updateMediaMetadata();
     }
 
     async start() {
         if (!this.currentText) this.app.readingPanel.render();
-        this.sessionId++;
         this.isPlaying = true;
         this.isWaitingForNextPage = false;
         if (this.els.icon) this.els.icon.textContent = '⏸';
-        
-        // Initialize Web Audio Context on user gesture
-        if (!this.audioCtx) {
-            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            this.nextScheduleTime = this.audioCtx.currentTime;
-        }
-        
-        if (this.silentAudio) this.silentAudio.play().catch(() => {});
-        this.requestWakeLock();
-        this.startHeartbeat();
-        this.readCurrentChunk();
+        this.playCurrentPage();
     }
 
-    startHeartbeat() {
-        if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
-        this.heartbeatInterval = setInterval(() => {
-            if (this.isPlaying) {
-                this.fillQueue(this.sessionId);
-                // Monitor scheduling to handle page jumps or stalls
-                if (this.audioCtx && this.audioCtx.currentTime > this.nextScheduleTime + 2) {
-                    this.nextScheduleTime = this.audioCtx.currentTime;
-                }
+    async playCurrentPage() {
+        this.debugLog(`Page: ${this.chunks.length} chunks → WorkerPool x${this.pool.size}`);
+
+        this._bufferedChunks = 0;
+        this._pendingPlay = true;
+        this._appendQueue = [];
+        this._appendBusy = false;
+
+        this.pool.clear();
+        this._teardownMediaSource();
+        this._setupMediaSource();
+
+        this.audioPlayer.playbackRate = this.app.ttsSpeed || 1.0;
+
+        // Start parallel synthesis — audio will play once _PLAY_AFTER_CHUNKS chunks are ready
+        this.pool.enqueue(this.chunks, this.app.ttsVoice || 'zh_CN-huayan-medium');
+        this.updateMediaMetadata(this.chunks[0]);
+    }
+
+    _setupMediaSource() {
+        // MediaSource: browser is notified immediately on appendBuffer(), no polling
+        this._mediaSource = new MediaSource();
+        this._sourceBuffer = null;
+        this._appendQueue = [];
+        this._appendBusy = false;
+
+        this._mediaSource.addEventListener('sourceopen', () => {
+            this.debugLog('MediaSource opened');
+            this._sourceBuffer = this._mediaSource.addSourceBuffer('audio/mpeg');
+            this._sourceBuffer.addEventListener('updateend', () => {
+                this._appendBusy = false;
+                this._drainAppendQueue();
+            });
+            this._drainAppendQueue();
+        }, { once: true });
+
+        // Use srcObject if available (Chrome 108+) — more reliable than blob URL
+        if ('srcObject' in this.audioPlayer && MediaSource.isTypeSupported !== undefined) {
+            try {
+                this.audioPlayer.srcObject = this._mediaSource;
+            } catch(e) {
+                // Fallback to blob URL
+                this.audioPlayer.src = URL.createObjectURL(this._mediaSource);
+                this.audioPlayer.load();
             }
-        }, 1000);
-    }
-
-    async readCurrentChunk() {
-        if (!this.isPlaying || this.chunkIndex >= this.chunks.length) {
-            if (this.isPlaying && this.chunkIndex >= this.chunks.length) this.requestNextPage();
-            return;
-        }
-
-        const sid = this.sessionId;
-
-        if (this.synthesisQueue.has(this.chunkIndex)) {
-            const blob = this.synthesisQueue.get(this.chunkIndex);
-            this.synthesisQueue.delete(this.chunkIndex); 
-            this.scheduleAudioBlob(blob, sid, this.chunkIndex);
-            return;
-        }
-
-        const blob = await this.synthesizeChunk(this.chunkIndex, sid);
-        if (blob && sid === this.sessionId && this.isPlaying) {
-            this.scheduleAudioBlob(blob, sid, this.chunkIndex);
+        } else {
+            this.audioPlayer.src = URL.createObjectURL(this._mediaSource);
+            this.audioPlayer.load(); // explicitly trigger resource selection → sourceopen
         }
     }
 
-    async synthesizeChunk(idx, sid) {
-        if (idx >= this.chunks.length) return null;
-        const text = this.chunks[idx];
-        const lang = /[\u3040-\u309F\u30A0-\u30FF]/.test(text) ? 'ja' : 
-                     (/[\u4e00-\u9fa5]/.test(text) ? 'zh-TW' : 'en');
+    _teardownMediaSource() {
+        // Just pause and clear internal state.
+        // Setting audioPlayer.src to a new blob URL in _setupMediaSource()
+        // will automatically abort the old source — no need for load() here.
+        // (load() after removeAttribute was preventing sourceopen from firing)
+        this.audioPlayer.pause();
+        if (this._mediaSource && this.audioPlayer.src.startsWith('blob:')) {
+            URL.revokeObjectURL(this.audioPlayer.src);
+        }
+        this._mediaSource = null;
+        this._sourceBuffer = null;
+        this._appendQueue = [];
+        this._appendBusy = false;
+        this._hasAppendedData = false;
+    }
 
-        const modelId = await this.initEngine(lang);
-        if (!modelId || sid !== this.sessionId) return null;
+    _appendToSourceBuffer(buffer) {
+        this._hasAppendedData = true;
+        this._appendQueue.push(buffer);
+        this._drainAppendQueue();
+    }
 
-        let inputPath = text;
-        if (lang === 'zh-TW' && this.converter) inputPath = this.converter(text);
+    _drainAppendQueue() {
+        if (this._appendBusy || !this._sourceBuffer || this._appendQueue.length === 0) return;
+        if (this._mediaSource?.readyState !== 'open') return;
+        if (this._sourceBuffer.updating) return;
 
+        this._appendBusy = true;
+        const next = this._appendQueue.shift();
         try {
-            if (idx === 0 && !this.isModelLoaded) {
-                this.app.showToast("正在載入離線模型並合成語音...");
-            }
-            const wavBlob = await window.VITSWeb.predict({ text: inputPath, voiceId: modelId });
-            this.isModelLoaded = true;
-            return wavBlob;
-        } catch (e) {
-            this.debugLog(`Synthesis error [${idx}]: ${e.message}`);
-            return null;
+            this._sourceBuffer.appendBuffer(next);
+        } catch(e) {
+            this.debugLog(`appendBuffer error: ${e.message}`);
+            this._appendBusy = false;
         }
     }
 
-    async fillQueue(sid) {
-        if (this.isSynthesizing || !this.isPlaying || sid !== this.sessionId) return;
-        this.isSynthesizing = true;
-
-        try {
-            for (let i = 1; i <= 5; i++) {
-                const nextIdx = this.chunkIndex + i;
-                if (nextIdx < this.chunks.length && !this.synthesisQueue.has(nextIdx)) {
-                    const blob = await this.synthesizeChunk(nextIdx, sid);
-                    if (blob && sid === this.sessionId) {
-                        this.synthesisQueue.set(nextIdx, blob);
-                    } else if (sid !== this.sessionId) {
-                        break;
-                    }
-                }
-            }
-        } finally {
-            this.isSynthesizing = false;
-        }
-    }
-
-    async scheduleAudioBlob(blob, sid, idx) {
-        if (!this.audioCtx || sid !== this.sessionId || !this.isPlaying) return;
-
-        try {
-            const arrayBuffer = await blob.arrayBuffer();
-            const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
-            
-            if (sid !== this.sessionId || !this.isPlaying) return;
-
-            const source = this.audioCtx.createBufferSource();
-            source.buffer = audioBuffer;
-            source.playbackRate.value = this.app.ttsSpeed || 1.0;
-            source.connect(this.audioCtx.destination);
-            
-            // Scheduling logic
-            const startTime = Math.max(this.audioCtx.currentTime, this.nextScheduleTime);
-            source.start(startTime);
-            
-            const duration = audioBuffer.duration / (this.app.ttsSpeed || 1.0);
-            this.nextScheduleTime = startTime + duration;
-
-            // When this buffer finishes, trigger next chunk logic
-            source.onended = () => {
-                if (sid !== this.sessionId || !this.isPlaying) return;
-                // Only increment chunkIndex if we finished the one we just played
-                if (this.chunkIndex === idx) {
-                    this.chunkIndex++;
-                    this.readCurrentChunk();
-                }
-            };
-
-            this.updateMediaMetadata(this.chunks[idx]);
-            this.fillQueue(sid);
-        } catch (e) {
-            this.debugLog(`Scheduling error: ${e.message}`);
-            this.chunkIndex++;
-            this.readCurrentChunk();
-        }
-    }
-
-    async requestWakeLock() {
-        if ('wakeLock' in navigator) {
-            try { this.wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {}
-        }
+    _startAudioPlayback() {
+        this.debugLog(`Starting playback (${this._bufferedChunks} chunk(s) buffered)`);
+        this.audioPlayer.play().catch(e => {
+            this.debugLog(`play() failed: ${e.message}`);
+            this.app.showToast(`音訊播放失敗: ${e.message}`);
+            this.stop();
+        });
     }
 
     requestNextPage() {
+        if (this.isWaitingForNextPage) return;
         this.isWaitingForNextPage = true;
         document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'nextPage' } }));
     }
 }
 
 window.ZenTTS = ZenTTS;
+
