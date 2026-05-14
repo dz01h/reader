@@ -110,7 +110,6 @@ class ZenTTS {
 
         // Audio Context for gapless playback
         this.audioCtx = null;
-        this.audioStreamDest = null;
         this.nextStartTime = 0;
         this._scheduledSources = [];
         this._decodeChain = Promise.resolve();
@@ -274,10 +273,13 @@ class ZenTTS {
             this.compressor.attack.setValueAtTime(0, this.audioCtx.currentTime);
             this.compressor.release.setValueAtTime(0.25, this.audioCtx.currentTime);
 
-            this.audioStreamDest = this.audioCtx.createMediaStreamDestination();
-            this.compressor.connect(this.audioStreamDest);
+            // Connect directly to hardware speakers
+            this.compressor.connect(this.audioCtx.destination);
             
-            this.audioPlayer.srcObject = this.audioStreamDest.stream;
+            // Play a silent background track to keep OS awake and enable MediaSession
+            this.audioPlayer.loop = true;
+            this.audioPlayer.src = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
+
         }
         if (this.audioCtx.state === 'suspended') {
             this.audioCtx.resume();
