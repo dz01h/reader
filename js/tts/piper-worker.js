@@ -1,14 +1,10 @@
 import * as VITSWeb from 'https://cdn.jsdelivr.net/npm/@diffusionstudio/vits-web@1.0.3/+esm';
 import * as OpenCC from 'https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/+esm';
-import { Mp3Encoder } from 'https://cdn.jsdelivr.net/npm/@breezystack/lamejs@1.2.7/+esm';
 
 let converter = null;
-let currentSessionId = 0;
 
 self.onmessage = async (e) => {
     const { type, text, voiceId, index, sessionId } = e.data;
-
-    console.log(`[worker]`, e.data);
 
     if (type === 'INIT') {
         converter = OpenCC.Converter({ from: 'tw', to: 'cn' });

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-reader-v4';
+const CACHE_NAME = 'zen-reader-v9';
 const urlsToCache = [
   './',
   './index.html',
@@ -14,11 +14,17 @@ const urlsToCache = [
   './js/gdrive.js',
   './js/app.js',
   './js/tts.js',
-  './js/tts-worker.js'
+  './js/tts/chunks.js',
+  './js/tts/piper.js',
+  './js/tts/piper-worker.js'
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(urlsToCache);
+    })
+  );
   self.skipWaiting();
 });
 
@@ -33,18 +39,43 @@ self.addEventListener('activate', event => {
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
-  if (!event.request.url.startsWith('http') || event.request.url.includes('googleapis.com')) return;
+
+  const url = new URL(event.request.url);
+  const isSameOrigin = url.origin === self.location.origin;
+  const isCDNHost = url.origin === 'https://cdn.jsdelivr.net';
+
+  if (!isSameOrigin && !isCDNHost) return;
 
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      const network = fetch(event.request).then(res => {
-        if (res && res.status === 200) {
-          const cloned = res.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, cloned));
+    (async () => {
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        const cachedResponse = await cache.match(event.request);
+        
+        // 對於 CDN 資源，採 Cache-First 策略以確保穩定與離線使用
+        if (isCDNHost && cachedResponse) {
+          return cachedResponse;
         }
-        return res;
-      }).catch(() => {});
-      return cached || network;
-    })
+
+        // 對於同源資源，採 Stale-While-Revalidate 策略
+        if (isSameOrigin && cachedResponse) {
+          fetch(event.request).then(networkResponse => {
+            if (networkResponse && networkResponse.status === 200) {
+              cache.put(event.request, networkResponse.clone());
+            }
+          }).catch(() => {}); 
+          return cachedResponse;
+        }
+
+        const networkResponse = await fetch(event.request);
+        if (networkResponse && (networkResponse.status === 200 || networkResponse.status === 0)) {
+          // status 0 代表 opaque response (跨網域)，我們也嘗試快取它
+          cache.put(event.request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch (e) {
+        return new Response('Network error', { status: 503 });
+      }
+    })()
   );
 });

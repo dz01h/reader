@@ -1,111 +1,16 @@
-// ─── Worker Pool ──────────────────────────────────────────────────────────────
-// Manages N parallel VITS workers with ordered MP3 output.
-class TTSWorkerPool {
-    constructor(size = 2) {
-        this.size = size;
-        this.workers = [];
-        this.pendingQueue = [];   // { index, text, voiceId }
-        this.resultBuffer = {};   // index → Uint8Array
-        this.nextDispatchIdx = 0;
-        this.nextFlushIdx = 0;
-        this.totalChunks = 0;
-
-        // Callbacks set by ZenTTS
-        this.onData = null;       // (Uint8Array) → void
-        this.onChunkDone = null;  // (text) → void
-        this.onAllDone = null;    // () → void
-
-        for (let i = 0; i < size; i++) {
-            const w = new Worker('js/tts-worker.js', { type: 'module' });
-            w._busy = false;
-            w.postMessage({ type: 'INIT' });
-            w.onmessage = (e) => this._onWorkerMsg(w, e.data);
-            this.workers.push(w);
-        }
-    }
-
-    enqueue(chunks, voiceId) {
-        this.pendingQueue = chunks.map((text, i) => ({ index: i, text, voiceId }));
-        this.resultBuffer = {};
-        this.nextFlushIdx = 0;
-        this.totalChunks = chunks.length;
-        this._dispatch();
-    }
-
-    clear() {
-        this.pendingQueue = [];
-        this.resultBuffer = {};
-        this.nextFlushIdx = 0;
-        this.totalChunks = 0;
-        // Mark workers idle; in-flight results will be ignored by stale index check
-        this.workers.forEach(w => w._busy = false);
-        this._sessionId = (this._sessionId || 0) + 1;
-    }
-
-    _dispatch() {
-        for (const w of this.workers) {
-            if (!w._busy && this.pendingQueue.length > 0) {
-                const item = this.pendingQueue.shift();
-                w._busy = true;
-                w._sessionId = this._sessionId;
-                w.postMessage({ type: 'SYNTHESIZE', ...item, sessionId: this._sessionId });
-            }
-        }
-    }
-
-    _onWorkerMsg(worker, data) {
-        worker._busy = false;
-
-        if (data.sessionId !== undefined && data.sessionId !== this._sessionId) {
-            this._dispatch();
-            return;
-        }
-
-        if (data.type === 'DONE') {
-            this.resultBuffer[data.index] = {
-                buffer: data.buffer,
-                text: data.text
-            };
-            this._flush();
-        } else if (data.type === 'ERROR') {
-            this.resultBuffer[data.index] = { buffer: null, text: data.text || '' };
-            this._flush();
-        }
-
-        this._dispatch();
-    }
-
-    _flush() {
-        while (this.resultBuffer.hasOwnProperty(this.nextFlushIdx)) {
-            const item = this.resultBuffer[this.nextFlushIdx];
-            if (item.buffer && this.onData) {
-                this.onData(item.buffer, null, item.text);
-            }
-            if (this.onChunkDone) this.onChunkDone(item.text);
-            delete this.resultBuffer[this.nextFlushIdx];
-            this.nextFlushIdx++;
-        }
-
-        const allFlushed = this.nextFlushIdx >= this.totalChunks;
-        const allIdle = this.workers.every(w => !w._busy);
-        const queueEmpty = this.pendingQueue.length === 0;
-        if (allFlushed && allIdle && queueEmpty && this.totalChunks > 0) {
-            if (this.onAllDone) this.onAllDone();
-        }
-    }
-}
-
-// ─── ZenTTS ──────────────────────────────────────────────────────────────────
+// ─── ZenTTS (Controller & Playback) ──────────────────────────────────────────
 class ZenTTS {
     constructor(app) {
         this.app = app;
 
         this.isPlaying = false;
         this.currentText = "";
-        this.chunks = [];
+        this.chunks = null;
+        this.ttsEngine = null;
         this.isWaitingForNextPage = false;
         this.isPaused = false;
-        this._PLAY_AFTER_CHUNKS = 1; 
+        this._synthDone = true;
+        this._lastReadingText = null; // tracks visible text to detect actual page change
 
         // Audio Context for gapless playback
         this.audioCtx = null;
@@ -128,36 +33,22 @@ class ZenTTS {
             this.els.speed.value = this.app.ttsSpeed;
         }
 
-        // Worker pool: 2 parallel VITS workers
-        this.pool = new TTSWorkerPool(2);
-
-        this.pool.onData = (buffer, _unused, text) => {
-            this._appendToWavQueue(buffer);
-        };
-
-        this.pool.onChunkDone = (text) => {
-            this._bufferedChunks++;
-            this.updateMediaMetadata(text);
-        };
-
-        this.pool.onAllDone = () => {};
-
         // Audio player
         this.audioPlayer = new Audio();
         this.audioPlayer.id = "tts-master-player";
         this.audioPlayer.style.display = "none";
         document.body.appendChild(this.audioPlayer);
 
-        this.audioPlayer.addEventListener('ended', () => {
-            // With MediaStream, ended only fires if the stream is closed.
-            // We handle page transitions via the scheduler now.
-        });
         this.audioPlayer.addEventListener('error', () => {
             if (this.isPlaying) {
                 this.app.showToast("音訊串流中斷，正在換頁...");
                 setTimeout(() => this.requestNextPage(), 800);
             }
         });
+
+        if (window.ZenTTSPiper) {
+            this.ttsEngine = new window.ZenTTSPiper();
+        }
 
         this.initMediaSession();
     }
@@ -201,52 +92,71 @@ class ZenTTS {
 
         document.body.addEventListener('ReadingOver', (e) => {
             const newText = e.detail.reading;
-            if (this.currentText !== newText) {
-                const lastChunk = this.chunks.length > 0 ? this.chunks[this.chunks.length - 1] : "";
-                this.currentText = newText;
-                this.prepareChunks(lastChunk);
-                if (this.isPlaying) {
-                    this.isWaitingForNextPage = false;
-                    this.playCurrentPage();
+            const textChanged = newText !== this._lastReadingText;
+            this._lastReadingText = newText;
+
+            if (!this.chunks || !this.ttsEngine) {
+                // First load: initialize chunks only
+                this.chunks = this.ttsEngine ? this.ttsEngine.createChunks(newText) : null;
+                return;
+            }
+
+            if (this.isWaitingForNextPage) {
+                // ── Auto page turn (TTS triggered): append new chunks seamlessly ──
+                this.isWaitingForNextPage = false;
+                this.chunks = this.chunks.append(newText);
+                // After append(), this.chunks.chunks contains ONLY the new page's chunks
+                const newChunks = this.chunks.chunks;
+                if (newChunks.length > 0 && this.isPlaying) {
+                    this._synthDone = false;
+                    document.body.dispatchEvent(new CustomEvent('ZenTTSPiper:Enqueue', {
+                        detail: { 
+                            chunks: newChunks, 
+                            voiceId: this.app.ttsVoice || 'zh_CN-huayan-medium',
+                            isAppend: true
+                        }
+                    }));
                 }
+            } else if (textChanged) {
+                // ── Text genuinely changed (manual page turn or jump) ──
+                this.chunks = this.ttsEngine.createChunks(newText);
+                if (this.isPlaying || this.isPaused) {
+                    // Interrupt current synthesis and restart for new page
+                    this._resetAndPlayCurrentPage();
+                }
+            }
+            // If !textChanged && !isWaitingForNextPage: same page re-render, do nothing
+        });
+
+        // Listen for Piper Engine output
+        document.body.addEventListener('ZenTTS:AudioData', (e) => {
+            const { buffer, text } = e.detail;
+            this._appendToWavQueue(buffer);
+        });
+
+        document.body.addEventListener('ZenTTS:ChunkDone', (e) => {
+            const { text, nextFlushIdx, totalChunks } = e.detail;
+            this.updateMediaMetadata(text);
+            
+            // Trigger next page when synthesis queue is exhausted
+            if (nextFlushIdx >= totalChunks && totalChunks > 0) {
+                this._synthDone = true;
+                if (this.isPlaying) this.requestNextPage();
             }
         });
-    }
-
-    prepareChunks(lastChunkOfPrevPage = "") {
-        // Split on all punctuation, keeping delimiter at end of each fragment
-        this.chunks = this.currentText
-            .split(/([\n，。、；：！？－—…])/)
-            .reduce((acc, part, i) => {
-                if (i % 2 === 0) {
-                    if (part.trim()) acc.push(part);
-                } else {
-                    if (acc.length > 0) acc[acc.length - 1] += part;
-                    else if (part.trim()) acc.push(part);
-                }
-                return acc;
-            }, [])
-            .filter(s => s.trim().length > 0);
-
-        // 如果有上一頁最後一句，嘗試分割第一句以避免重複朗讀
-        if (lastChunkOfPrevPage && this.chunks.length > 0) {
-            const first = this.chunks[0];
-            if (first.includes(lastChunkOfPrevPage)) {
-                const remaining = first.split(lastChunkOfPrevPage).pop().trim();
-                if (remaining) {
-                    this.chunks[0] = remaining;
-                } else {
-                    this.chunks.shift();
-                }
-            }
-        }
     }
 
     toggle() {
         if (this.isPlaying) {
             this.pause();
         } else if (this.isPaused) {
-            this.resume();
+            // If synthesis is exhausted and no audio is scheduled, restart fresh
+            if (this._synthDone && this._scheduledSources.length === 0) {
+                this.isPaused = false;
+                this.start();
+            } else {
+                this.resume();
+            }
         } else {
             this.start();
         }
@@ -256,6 +166,7 @@ class ZenTTS {
         if (!this.isPlaying) return;
         this.isPlaying = false;
         this.isPaused = true;
+        
         if (this.els.icon) this.els.icon.textContent = '▶';
         
         if (this.audioCtx && this.audioCtx.state === 'running') {
@@ -269,6 +180,7 @@ class ZenTTS {
         if (!this.isPaused) return;
         this.isPlaying = true;
         this.isPaused = false;
+        
         if (this.els.icon) this.els.icon.textContent = '⏸';
         
         if (this.audioCtx && this.audioCtx.state === 'suspended') {
@@ -283,14 +195,14 @@ class ZenTTS {
         this.isPaused = false;
         if (this.els.icon) this.els.icon.textContent = '▶';
 
-        this.pool.clear();
+        document.body.dispatchEvent(new CustomEvent('ZenTTSPiper:Clear'));
         this._clearAudioContext();
         this.audioPlayer.pause();
         this.updateMediaMetadata();
     }
 
     async start() {
-        if (!this.currentText) this.app.readingPanel.render();
+        if (!this.chunks) this.app.readingPanel.render();
         this.isPlaying = true;
         this.isPaused = false;
         this.isWaitingForNextPage = false;
@@ -299,26 +211,53 @@ class ZenTTS {
     }
 
     async playCurrentPage() {
-        this._bufferedChunks = 0;
+        if (!this.chunks || this.chunks.chunks.length === 0) return;
 
-        this.pool.clear();
+        this._synthDone = false;
+        this._clearAudioContext();
         this._setupAudioContext();
 
         // Play MUST be called synchronously here to capture the user gesture on mobile
         this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
-
         this.audioPlayer.playbackRate = this.app.ttsSpeed || 1.0;
 
-        // Start parallel synthesis
-        this.pool.enqueue(this.chunks, this.app.ttsVoice || 'zh_CN-huayan-medium');
-        this.updateMediaMetadata(this.chunks[0]);
+        // Tell Piper Engine to synthesize (fresh start, not append)
+        document.body.dispatchEvent(new CustomEvent('ZenTTSPiper:Enqueue', {
+            detail: { 
+                chunks: this.chunks.chunks, 
+                voiceId: this.app.ttsVoice || 'zh_CN-huayan-medium',
+                isAppend: false
+            }
+        }));
+
+        this.updateMediaMetadata(this.chunks.chunks[0]);
+    }
+
+    _resetAndPlayCurrentPage() {
+        // Used for manual page turn during playback
+        this._synthDone = false;
+        // Hard clear: terminate in-flight ONNX workers to reclaim compute immediately
+        document.body.dispatchEvent(new CustomEvent('ZenTTSPiper:Clear', { detail: { hard: true } }));
+        this._clearAudioContext();
+        this._setupAudioContext();
+        this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
+        this.audioPlayer.playbackRate = this.app.ttsSpeed || 1.0;
+
+        if (!this.chunks || this.chunks.chunks.length === 0) return;
+        document.body.dispatchEvent(new CustomEvent('ZenTTSPiper:Enqueue', {
+            detail: { 
+                chunks: this.chunks.chunks, 
+                voiceId: this.app.ttsVoice || 'zh_CN-huayan-medium',
+                isAppend: false
+            }
+        }));
+        this.updateMediaMetadata(this.chunks.chunks[0]);
     }
 
     _setupAudioContext() {
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             
-            // Add compressor to prevent clipping
             this.compressor = this.audioCtx.createDynamicsCompressor();
             this.compressor.threshold.setValueAtTime(-1.0, this.audioCtx.currentTime);
             this.compressor.knee.setValueAtTime(40, this.audioCtx.currentTime);
@@ -326,19 +265,21 @@ class ZenTTS {
             this.compressor.attack.setValueAtTime(0, this.audioCtx.currentTime);
             this.compressor.release.setValueAtTime(0.25, this.audioCtx.currentTime);
 
-            // Connect directly to hardware speakers
             this.compressor.connect(this.audioCtx.destination);
             
-            // Play a silent background track to keep OS awake and enable MediaSession
             this.audioPlayer.loop = true;
-            this.audioPlayer.src = this._createSilentAudioURL(15);
-
         }
+
+        // Always ensure audioPlayer has a valid source if playing
+        // Use a short, standard 44.1kHz silent WAV to avoid demuxer issues
+        if (!this.audioPlayer.src || this.audioPlayer.src.length < 10) {
+            this.audioPlayer.src = this._createSilentAudioURL(1);
+        }
+
         if (this.audioCtx.state === 'suspended') {
             this.audioCtx.resume();
         }
 
-        // Only reset schedule if we are truly starting fresh or the schedule is in the past
         const now = this.audioCtx.currentTime;
         if (this.nextStartTime < now) {
             this.nextStartTime = now + 0.1;
@@ -355,7 +296,6 @@ class ZenTTS {
         this._decodeChain = Promise.resolve();
         this.nextStartTime = 0;
         if (this.audioCtx && this.audioCtx.state !== 'closed') {
-            // We don't close it, just suspend to reuse
             this.audioCtx.suspend();
         }
     }
@@ -374,12 +314,12 @@ class ZenTTS {
     }
 
     _createSilentAudioURL(seconds) {
-        const sampleRate = 8000;
+        const sampleRate = 44100;
         const numChannels = 1;
         const bitsPerSample = 16;
         const blockAlign = numChannels * (bitsPerSample / 8);
         const byteRate = sampleRate * blockAlign;
-        const dataSize = seconds * byteRate;
+        const dataSize = Math.floor(seconds * byteRate);
         const buffer = new ArrayBuffer(44 + dataSize);
         const view = new DataView(buffer);
 
@@ -408,13 +348,12 @@ class ZenTTS {
     }
 
     _scheduleBuffer(audioBuffer) {
-        if (!this.isPlaying || !this.audioCtx) return;
+        if ((!this.isPlaying && !this.isPaused) || !this.audioCtx) return;
 
         const source = this.audioCtx.createBufferSource();
         source.buffer = audioBuffer;
         source.playbackRate.value = this.app.ttsSpeed || 1.0;
         
-        // Use a GainNode for a tiny fade-in/out to prevent clicks at boundaries
         const gainNode = this.audioCtx.createGain();
         source.connect(gainNode);
         gainNode.connect(this.compressor);
@@ -423,7 +362,6 @@ class ZenTTS {
         const start = Math.max(now, this.nextStartTime);
         const duration = audioBuffer.duration / (this.app.ttsSpeed || 1.0);
 
-        // 5ms fade in/out
         const fadeTime = 0.005;
         gainNode.gain.setValueAtTime(0, start);
         gainNode.gain.linearRampToValueAtTime(1, start + fadeTime);
@@ -434,12 +372,6 @@ class ZenTTS {
         this._scheduledSources.push(source);
         this.nextStartTime = start + duration;
 
-        // Pre-fetch next page text as soon as the last chunk is scheduled
-        if (this.pool.nextFlushIdx >= this.pool.totalChunks && this.pool.totalChunks > 0) {
-            this.requestNextPage();
-        }
-
-        // Handle end of page (cleanup list)
         source.onended = () => {
             this._scheduledSources = this._scheduledSources.filter(s => s !== source);
         };
@@ -453,4 +385,3 @@ class ZenTTS {
 }
 
 window.ZenTTS = ZenTTS;
-
