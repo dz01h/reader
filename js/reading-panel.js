@@ -26,6 +26,10 @@ class ReadingPanel {
         document.body.addEventListener('ReadingOperation', (e) => {
             if (e.detail && e.detail.action === 'nextPage') {
                 this.nextPage();
+            } else if (e.detail && e.detail.action === 'prevPage') {
+                this.prevPage();
+            } else if (e.detail && e.detail.action === 'requestReadingOver') {
+                this.dispatchReadingOver();
             }
         });
     }
@@ -106,23 +110,47 @@ class ReadingPanel {
 
     dispatchReadingOver() {
         if (!this.drawOps || this.drawOps.length === 0) return;
-        const { vMin, vMax } = this.getVisibleRange();
+        const { vMin, vMax, cw, ch } = this.getVisibleRange();
         
-        // Find visible characters and group into paragraphs (roughly)
+        // Find visible characters for current page
         const visibleOps = this.drawOps.filter(o => {
             const coord = this.app.currentWritingMode === 'vertical' ? o.x : o.y;
             return this.app.currentWritingMode === 'vertical' ? (coord >= vMin && coord <= vMax) : (coord >= vMin && coord <= vMax);
         });
 
-        // Collect text. In vertical mode, they are right-to-left, top-to-bottom.
-        // In horizontal mode, they are top-to-bottom, left-to-right.
-        // The drawOps are already in reading order.
+        // Find characters for NEXT page
+        const margins = this.app.margins || { top: 0, bottom: 0, left: 0, right: 0 };
+        const fontSize = this.app.currentFontSize || 18;
+        const lineHeightRatio = this.app.currentLineHeight || 1.8;
+        const gridStep = fontSize * lineHeightRatio;
+        const viewSize = this.app.currentWritingMode === 'vertical' 
+            ? (cw - margins.left - margins.right)
+            : (ch - margins.top - margins.bottom);
+        const maxLines = Math.max(1, Math.floor(viewSize / gridStep));
+        const jump = maxLines * gridStep;
+        
+        let next_vMin, next_vMax;
+        if (this.app.currentWritingMode === 'vertical') {
+            next_vMin = -(this.scrollOffset + jump);
+            next_vMax = cw - (this.scrollOffset + jump);
+        } else {
+            next_vMin = this.scrollOffset + jump;
+            next_vMax = ch + (this.scrollOffset + jump);
+        }
+
+        const nextVisibleOps = this.drawOps.filter(o => {
+            const coord = this.app.currentWritingMode === 'vertical' ? o.x : o.y;
+            return this.app.currentWritingMode === 'vertical' ? (coord >= next_vMin && coord <= next_vMax) : (coord >= next_vMin && coord <= next_vMax);
+        });
+
         let text = visibleOps.map(o => o.char).join('');
+        let nextText = nextVisibleOps.map(o => o.char).join('');
         const prog = this.maxScroll > 0 ? this.scrollOffset / this.maxScroll : 0;
         
         document.body.dispatchEvent(new CustomEvent('ReadingOver', {
             detail: { 
                 reading: text,
+                nextReading: nextText,
                 prog: prog
             }
         }));
@@ -131,6 +159,11 @@ class ReadingPanel {
     nextPage() {
         const rect = this.canvas.getBoundingClientRect();
         this.executeAction('next', rect);
+    }
+
+    prevPage() {
+        const rect = this.canvas.getBoundingClientRect();
+        this.executeAction('prev', rect);
     }
 
     bindEvents() {

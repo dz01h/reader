@@ -26,8 +26,8 @@ class ZenTTSChunker {
         return this.idx < this.chunks.length;
     }
 
-    append(text) {
-        return new this.constructor(text, this);
+    async speak() {
+        throw new Error('speak() must be implemented by subclass');
     }
 }
 
