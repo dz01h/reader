@@ -143,6 +143,21 @@ class ZenTTSPiper {
             this._lastRawText = null;
         }
     }
+
+    destroy() {
+        this.stopAudio(true);
+        // Explicitly terminate all workers to free WASM memory
+        this.pool.workers.forEach(w => {
+            try { w.terminate(); } catch(e) {}
+        });
+        this.pool.workers = [];
+        this.voicePool.clear();
+        
+        if (this.audioCtx) {
+            try { this.audioCtx.close(); } catch(e) {}
+            this.audioCtx = null;
+        }
+    }
 }
 
 class ZenTTSPiperChunks extends ZenTTSChunker {

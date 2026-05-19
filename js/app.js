@@ -9,6 +9,7 @@ class ZenReaderApp {
         this.currentBook = null;
         this.ttsSpeed = 1.0;
         this.ttsVoice = 'zh_CN-huayan-medium';
+        this.ttsEngine = 'piper';
         
         // Touch Quadrants
         this.quadTL = 'prev';
@@ -123,6 +124,7 @@ class ZenReaderApp {
                     if (this.els.ttsSpeed) this.els.ttsSpeed.value = this.ttsSpeed;
                 }
                 if (state.ttsVoice) this.ttsVoice = state.ttsVoice;
+                if (state.ttsEngine) this.ttsEngine = state.ttsEngine;
                 
                 if (state.quadTL) this.quadTL = state.quadTL;
                 if (state.quadTR) this.quadTR = state.quadTR;
@@ -445,11 +447,20 @@ class ZenReaderApp {
         this.saveState({ ttsSpeed: this.ttsSpeed });
     }
 
+    setTTSEngine(val) {
+        this.ttsEngine = val;
+        this.saveState({ ttsEngine: this.ttsEngine });
+        if (this.tts) {
+            this.tts.switchEngine(val);
+        }
+    }
+
     setTTSVoice(val) {
         this.ttsVoice = val;
         this.saveState({ ttsVoice: this.ttsVoice });
+        // Optional: WebSpeech API might be able to change voices dynamically, but 
+        // restart ensures it picks up correctly.
         if (this.tts && this.tts.isPlaying) {
-            // Restart TTS to use new voice
             this.tts.stop();
             this.tts.start();
         }

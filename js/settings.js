@@ -38,6 +38,7 @@ class ZenSettings {
         this.qrContainer = document.getElementById('qr-container');
         this.qrCodeEl = document.getElementById('qr-code');
 
+        this.ttsEngineSelect = document.getElementById('setting-tts-engine');
         this.ttsVoiceSelect = document.getElementById('setting-tts-voice');
         this.ttsSpeedSlider = document.getElementById('setting-tts-speed-slider');
         this.ttsSpeedDisplay = document.getElementById('setting-tts-speed-display');
@@ -89,6 +90,9 @@ class ZenSettings {
             this.syncCooldownSelect.value = this.app.syncCooldown;
         }
 
+        if (this.ttsEngineSelect) {
+            this.ttsEngineSelect.value = this.app.ttsEngine || 'piper';
+        }
         if (this.ttsVoiceSelect) {
             this.ttsVoiceSelect.value = this.app.ttsVoice || 'zh_CN-huayan-medium';
         }
@@ -183,6 +187,11 @@ class ZenSettings {
             this.syncCooldownSelect.addEventListener('change', (e) => this.app.setSyncCooldown(e.target.value));
         }
 
+        if (this.ttsEngineSelect) {
+            this.ttsEngineSelect.addEventListener('change', (e) => {
+                this.app.setTTSEngine(e.target.value);
+            });
+        }
         if (this.ttsVoiceSelect) {
             this.ttsVoiceSelect.addEventListener('change', (e) => {
                 this.app.setTTSVoice(e.target.value);

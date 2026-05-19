@@ -78,29 +78,50 @@ Controller、Engine 與 ReadingPanel 之間完全透過 `document.body` 上的 C
 
 ---
 
-## 🏗️ [Draft] 新架構提案：以 Chunks 為中心的統一介面與 VoicePool
+## 🏗️ 引擎抽象介面 (Engine & Chunker Interfaces)
 
-為了徹底解耦並輕鬆抽換不同的 TTS 引擎（Piper vs Web Speech API），我們將採用以 `Chunks` 為發聲主體的迴圈架構，並透過 `VoicePool` 解決非同步與效能問題。
+為了徹底解耦並輕鬆抽換不同的 TTS 引擎（例如 Piper vs Web Speech API），所有的 TTS Engine 都必須實作以下介面。
 
-### 1. 職責重分配
+### 1. TTS Engine 抽象介面
+
+任何實作的 Engine 必須提供以下方法供 Controller (`tts.js`) 呼叫：
+
+*   **`prepare(readingData) -> ZenTTSChunker`**
+    *   **用途**：當收到 `ReadingOver` 事件時，準備該頁面的音訊。
+    *   **職責**：比對與過濾跨頁重疊字串 (Raw Text Overlap)、進行斷句，並回傳一個封裝好的 `Chunker` 物件。如果引擎支援背景快取 (如 Piper)，在這裡啟動 Worker 排程。
+*   **`stopAudio(hardClear: boolean)`**
+    *   **用途**：立即中斷發聲。
+    *   **職責**：如果 `hardClear` 為 `true` (例如使用者手動跳頁)，需要清空排程佇列；如果為 `false`，僅中斷當前發聲，但允許背景繼續合成快取。
+*   **`suspendAudio()` / `resumeAudio()`**
+    *   **用途**：處理暫停與恢復。
+    *   **職責**：凍結與解凍時間軸。使用 AudioContext 的引擎直接呼叫 `suspend/resume`，而 Web Speech API 等原生引擎則對應呼叫 `window.speechSynthesis.pause/resume`。
+*   **`destroy()`**
+    *   **用途**：當使用者在設定中切換到其他 TTS 引擎時，關閉並銷毀當前引擎。
+    *   **職責**：徹底釋放系統資源以達到極致省電。例如 Piper 必須在此清空 `voicePool`、呼叫所有 Worker 的 `terminate()`，並 `close()` AudioContext。
+
+### 2. TTS Chunker 抽象介面
+
+引擎的 `prepare()` 必須回傳這個物件，它負責控制每一句「話」的流動：
+
+*   **`hasNext() -> boolean`**：是否還有下一句。
+*   **`first() -> string`**：取得即將播放的下一句話的純文字（但不推進指標，用於更新 UI Metadata）。
+*   **`next() -> string`**：取得並推進指標。
+*   **`async speak() -> Promise<void>`**
+    *   **用途**：播放當前這句話。
+    *   **核心合約**：必須在聲音**確實播放完畢**時（包含標點符號的自然停頓），這個 Promise 才能 `resolve()`。
+    *   **附帶動作**：在播放開始前，必須派發 `ZenTTS:ChunkPlaying` 事件。
+
+### 3. 各方職責重分配與細節
 
 * **ZenTTS (Controller)**
-  * 負責監聽 UI 與 `ReadingOver`。不處理 `AudioContext`，也不處理合成。
-  * `ReadingOver` 事件將擴充，同時帶有 `currentPage` 與預先抓取的 `nextPage` 內容。
-  * 負責維護一個簡單的非同步 `while` 迴圈來呼叫 `chunks.speak()`。
-  * **節能惰性加載 (Battery-Saving Lazy Init)**：在 TTS 完全停止（非播放、非暫停）的狀態下，即使收到 `ReadingOver` 也**完全不調用 `prepare()`**，讓 Worker 完全靜止以節省電量。當播放鍵按下且 `this.chunks` 為空時，會向 ReadingPanel 發送 `requestReadingOver` 事件觸發即時重新渲染與資料載入，隨後自動開啟播放。
+  * 負責維護一個簡單的非同步 `while` 迴圈來呼叫 `chunks.speak()`。不處理 `AudioContext`，也不處理合成。
+  * **節能惰性加載 (Battery-Saving Lazy Init)**：在 TTS 完全停止的狀態下，收到 `ReadingOver` **不調用 `prepare()`** 以節省電量。當播放鍵按下且 `this.chunks` 為空時，才發送 `requestReadingOver` 觸發即時資料載入與播放。
 
-* **TTSEngine (Piper / WebSpeech)**
-  * 提供 `prepare(readingData)` 方法，直接接收 `ReadingOver` 的 event data（包含目前頁面與下一頁的文字）。
-  * 引擎負責將文字拆解為獨立的句段（Chunk keys），並產出對應的 `Chunks` 物件。**引擎的拆解邏輯與 Chunks 內部必須完全一致**，確保對應的 key 吻合。
-  * **(Piper 專屬) VoicePool 管理與 Worker 排程**：
-    * 維護一個 `VoicePool` (Key-Value map)，將句段文字映射到算好的 AudioBuffer。
-    * **排程**：Worker manager 只需不斷掃描 `VoicePool` 中「尚未擁有音訊資料」的 key，並將其派發給閒置的 Worker 計算。
-    * **延遲清理快取 (Lazy Cache Cleanup)**：為了避免使用者在暫停/重播/倒退時需要重新合成語音造成耗電與卡頓，播放完畢時**不**會立即刪除 `VoicePool` 內部的語音資料。所有的快取清理與記憶體釋放統一延後至 `prepare()` 階段，伴隨跳頁或翻頁時比對新舊 `allNeededKeys` 自動進行 GC 清理。
-    * **跳頁清理與順序重排 (Garbage Collection & Reordering)**：當收到新的 `ReadingOver` 呼叫 `prepare()` 時，必須按照新 `allNeededKeys` 的順序（目前頁面的 Chunks 在前，下一頁的 Chunks 在後）重新建構 `VoicePool`。未被播放且不再出現在新 keys 中的舊資料會被自動 GC 刪除；而仍在保留名單中的舊資料與新增的 pending 任務，則會按照新順序在 Map 中重排（利用 JS Map 保留插入順序的特性）。這能確保 Worker 掃描排程時，百分之百優先合成當前頁面急需播放的語音，極大化縮短首字播放延遲。
+* **TTSEngine (引擎實作實例)**
+  * **(Piper 專屬) VoicePool 管理與延遲清理 (Lazy GC)**：為了避免使用者在暫停/重播/倒退時需要重新合成語音，播放完畢時**不**會立即刪除 `VoicePool` 內部的快取。快取清理統一延後至 `prepare()` 階段自動進行 GC，確保 Worker 優先合成當前頁面急需的語音。
 
-* **Chunks (執行者)**
-  * 實作 `async speak()` 方法。負責「發聲」與「流程等待」。
+* **Chunks (執行者實例)**
+  * 隱藏底層播放邏輯，只對外暴露純淨的 `speak()` 控制流。
 
 ### 2. ZenTTS 的主迴圈設計
 

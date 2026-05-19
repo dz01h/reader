@@ -34,11 +34,30 @@ class ZenTTS {
         this.audioPlayer.src = this._createSilentAudioURL(1);
         document.body.appendChild(this.audioPlayer);
 
-        if (window.ZenTTSPiper) {
+        const initialEngine = this.app.ttsEngine || 'piper';
+        this.switchEngine(initialEngine);
+
+        this.initMediaSession();
+    }
+
+    switchEngine(engineType) {
+        const wasPlaying = this.isPlaying && !this.isPaused;
+        
+        if (this.ttsEngine) {
+            this.ttsEngine.destroy();
+            this.ttsEngine = null;
+        }
+
+        if (engineType === 'webspeech' && window.ZenTTSWebSpeech) {
+            this.ttsEngine = new window.ZenTTSWebSpeech(this.app);
+        } else if (window.ZenTTSPiper) {
             this.ttsEngine = new window.ZenTTSPiper(this.app);
         }
 
-        this.initMediaSession();
+        // If we switched engines while playing, we need to restart the current page
+        if (wasPlaying && this._lastReadingText) {
+            this._resetAndPlayCurrentPage(false);
+        }
     }
 
     initMediaSession() {

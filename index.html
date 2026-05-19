@@ -219,7 +219,14 @@
             </fieldset>
 
             <fieldset class="setting-fieldset">
-                <legend data-i18n="settingTTSGroup">TTS 語音設定 (離線 AI)</legend>
+                <legend data-i18n="settingTTSGroup">TTS 語音設定</legend>
+                <div class="setting-group">
+                    <label for="setting-tts-engine" data-i18n="settingTTSEngine">語音引擎</label>
+                    <select id="setting-tts-engine" style="width: 100%;">
+                        <option value="piper">Piper (離線高音質 AI)</option>
+                        <option value="webspeech">Web Speech API (系統原生/極度省電)</option>
+                    </select>
+                </div>
                 <div class="setting-group">
                     <label for="setting-tts-voice" data-i18n="settingTTSVoice">語音模型</label>
                     <select id="setting-tts-voice" style="width: 100%;">
@@ -284,6 +291,7 @@
     <script src="js/engine.js"></script>
     <script src="js/tts/chunks.js"></script>
     <script src="js/tts/piper.js"></script>
+    <script src="js/tts/webspeech.js"></script>
     <script src="js/tts.js"></script>
     <script src="js/reading-log.js"></script>
     <script src="js/reading-panel.js"></script>
