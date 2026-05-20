@@ -11,6 +11,13 @@ class ZenTTS {
         this._lastReadingText = null;
         this._playSessionId = 0; // Used to cancel older loops when turning pages
 
+        this.wakeLock = null;
+        this._handleVisibilityChange = async () => {
+            if (this.wakeLock !== null && document.visibilityState === 'visible') {
+                await this.acquireWakeLock();
+            }
+        };
+
         this.initDOM();
         this.bindEvents();
     }
@@ -182,6 +189,7 @@ class ZenTTS {
             this.ttsEngine.suspendAudio();
         }
         this.audioPlayer.pause();
+        this.releaseWakeLock(); // Release screen lock on pause
         this.updateMediaMetadata();
     }
 
@@ -196,6 +204,7 @@ class ZenTTS {
             this.ttsEngine.resumeAudio();
         }
         this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
+        this.acquireWakeLock(); // Acquire screen lock on resume
         this.updateMediaMetadata();
     }
 
@@ -209,6 +218,7 @@ class ZenTTS {
             this.ttsEngine.stopAudio(false); 
         }
         this.audioPlayer.pause();
+        this.releaseWakeLock(); // Release screen lock on stop
         this.updateMediaMetadata();
     }
 
@@ -221,6 +231,8 @@ class ZenTTS {
         // **Critical for iOS/Android**: Must call play() synchronously within the user gesture (click event)
         // to acquire the MediaSession lock screen controls!
         this.audioPlayer.play().catch(e => console.warn(`audioPlayer.play() in start: ${e.message}`));
+
+        this.acquireWakeLock(); // Acquire screen lock during active reading
 
         if (!this.chunks) {
             document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'requestReadingOver' } }));
@@ -286,6 +298,29 @@ class ZenTTS {
 
         const blob = new Blob([buffer], { type: 'audio/wav' });
         return URL.createObjectURL(blob);
+    }
+
+    async acquireWakeLock() {
+        if ('wakeLock' in navigator && !this.wakeLock) {
+            try {
+                this.wakeLock = await navigator.wakeLock.request('screen');
+                document.addEventListener('visibilitychange', this._handleVisibilityChange);
+            } catch (err) {
+                console.warn(`Failed to acquire Wake Lock: ${err.message}`);
+            }
+        }
+    }
+
+    async releaseWakeLock() {
+        if (this.wakeLock) {
+            try {
+                await this.wakeLock.release();
+                this.wakeLock = null;
+            } catch (err) {
+                console.warn(`Failed to release Wake Lock: ${err.message}`);
+            }
+            document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+        }
     }
 }
 
