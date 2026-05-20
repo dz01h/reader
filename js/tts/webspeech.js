@@ -4,6 +4,14 @@ class ZenTTSWebSpeech {
         this._lastRawText = null;
         this.synth = window.speechSynthesis;
         
+        // Force cancel and resume to clear any stuck browser speech synthesis queue
+        try {
+            this.synth.cancel();
+            this.synth.resume();
+        } catch (e) {
+            console.warn("Failed to reset speechSynthesis queue:", e);
+        }
+        
         // Ensure voices are loaded (some browsers load them asynchronously)
         if (this.synth.onvoiceschanged !== undefined) {
             this.synth.onvoiceschanged = () => this.synth.getVoices();

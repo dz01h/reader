@@ -29,9 +29,14 @@ class ZenTTS {
         // Silent audio player to keep OS awake and bind MediaSession
         this.audioPlayer = new Audio();
         this.audioPlayer.id = "tts-master-player";
-        this.audioPlayer.style.display = "none";
+        // Visually hide instead of display: none to prevent browsers from suspending it
+        this.audioPlayer.style.position = "absolute";
+        this.audioPlayer.style.width = "1px";
+        this.audioPlayer.style.height = "1px";
+        this.audioPlayer.style.opacity = "0";
+        this.audioPlayer.style.pointerEvents = "none";
         this.audioPlayer.loop = true;
-        this.audioPlayer.src = this._createSilentAudioURL(1);
+        this.audioPlayer.src = "s.wav"; // Use static, reliable WAV file (cached by service worker)
         document.body.appendChild(this.audioPlayer);
 
         const initialEngine = this.app.ttsEngine || 'piper';
@@ -43,6 +48,9 @@ class ZenTTS {
     switchEngine(engineType) {
         const wasPlaying = this.isPlaying && !this.isPaused;
         
+        // Cancel any active loops immediately
+        this._playSessionId++;
+
         if (this.ttsEngine) {
             this.ttsEngine.destroy();
             this.ttsEngine = null;
@@ -50,14 +58,20 @@ class ZenTTS {
 
         if (engineType === 'webspeech' && window.ZenTTSWebSpeech) {
             this.ttsEngine = new window.ZenTTSWebSpeech(this.app);
+            // WebSpeech doesn't need (and conflicts with) the silent HTML5 audio player
+            if (this.audioPlayer) {
+                this.audioPlayer.pause();
+            }
         } else if (window.ZenTTSPiper) {
             this.ttsEngine = new window.ZenTTSPiper(this.app);
         }
 
+        // Old chunks belong to the destroyed engine, discard them
+        this.chunks = null;
+
         // If we switched engines while playing, we need to restart the current page
         if (wasPlaying && this._lastReadingText) {
             this.isPlaying = true;
-            this.chunks = null; // force re-prepare
             document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'requestReadingOver' } }));
         }
     }
@@ -84,14 +98,14 @@ class ZenTTS {
                 title: this.app.els.documentTitle?.textContent || 'Zen Reader',
                 artist: 'Offline AI TTS',
                 album: chunkText || '合成中...',
-                artwork: [{ src: 'icon.svg', sizes: '512x512', type: 'image/svg+xml' }]
+                artwork: [{ src: new URL('icon.svg', window.location.href).href, sizes: '512x512', type: 'image/svg+xml' }]
             });
             navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : (this.isPaused ? 'paused' : 'none');
         }
 
-        // WebSpeech API might cause the OS to duck or pause HTML5 audio.
-        // We must forcefully keep the silent audio loop alive to retain lock screen controls.
-        if (this.isPlaying && this.audioPlayer && this.audioPlayer.paused) {
+        // WebSpeech API doesn't need the silent audio loop and playing it can cause focus muting on Android.
+        // Only keep the silent audio loop active for non-WebSpeech engines (like Piper).
+        if (this.app.ttsEngine !== 'webspeech' && this.isPlaying && this.audioPlayer && this.audioPlayer.paused) {
             this.audioPlayer.play().catch(e => console.warn('Silent audio play blocked:', e));
         }
     }
@@ -185,7 +199,9 @@ class ZenTTS {
         if (this.ttsEngine && this.ttsEngine.resumeAudio) {
             this.ttsEngine.resumeAudio();
         }
-        this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
+        if (this.app.ttsEngine !== 'webspeech') {
+            this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
+        }
         this.updateMediaMetadata();
     }
 
@@ -208,6 +224,12 @@ class ZenTTS {
         this.isWaitingForNextPage = false;
         if (this.els.icon) this.els.icon.textContent = '⏸';
         
+        // **Critical for iOS/Android**: Must call play() synchronously within the user gesture (click event)
+        // to acquire the MediaSession lock screen controls (only for non-WebSpeech engines)!
+        if (this.app.ttsEngine !== 'webspeech') {
+            this.audioPlayer.play().catch(e => console.warn(`audioPlayer.play() in start: ${e.message}`));
+        }
+
         if (!this.chunks) {
             document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'requestReadingOver' } }));
         } else {
@@ -218,8 +240,10 @@ class ZenTTS {
     async playCurrentPage() {
         if (!this.chunks) return;
 
-        // Ensure the silent audio is playing to keep system awake
-        this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
+        // Ensure the silent audio is playing to keep system awake (only for non-WebSpeech engines)
+        if (this.app.ttsEngine !== 'webspeech') {
+            this.audioPlayer.play().catch(e => console.error(`audioPlayer.play() error: ${e.message}`));
+        }
 
         const sessionId = ++this._playSessionId;
         const currentChunks = this.chunks;
@@ -240,39 +264,6 @@ class ZenTTS {
         document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'nextPage' } }));
     }
 
-    _createSilentAudioURL(seconds) {
-        const sampleRate = 44100;
-        const numChannels = 1;
-        const bitsPerSample = 16;
-        const blockAlign = numChannels * (bitsPerSample / 8);
-        const byteRate = sampleRate * blockAlign;
-        const dataSize = Math.floor(seconds * byteRate);
-        const buffer = new ArrayBuffer(44 + dataSize);
-        const view = new DataView(buffer);
-
-        const writeString = (offset, string) => {
-            for (let i = 0; i < string.length; i++) {
-                view.setUint8(offset + i, string.charCodeAt(i));
-            }
-        };
-
-        writeString(0, 'RIFF');
-        view.setUint32(4, 36 + dataSize, true);
-        writeString(8, 'WAVE');
-        writeString(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true); // PCM
-        view.setUint16(22, numChannels, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, byteRate, true);
-        view.setUint16(32, blockAlign, true);
-        view.setUint16(34, bitsPerSample, true);
-        writeString(36, 'data');
-        view.setUint32(40, dataSize, true);
-
-        const blob = new Blob([buffer], { type: 'audio/wav' });
-        return URL.createObjectURL(blob);
-    }
 }
 
 window.ZenTTS = ZenTTS;

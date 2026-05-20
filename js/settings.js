@@ -93,12 +93,68 @@ class ZenSettings {
         if (this.ttsEngineSelect) {
             this.ttsEngineSelect.value = this.app.ttsEngine || 'piper';
         }
-        if (this.ttsVoiceSelect) {
-            this.ttsVoiceSelect.value = this.app.ttsVoice || 'zh_CN-huayan-medium';
-        }
+        this.updateVoiceDropdown();
         if (this.ttsSpeedSlider) {
             this.ttsSpeedSlider.value = this.app.ttsSpeed || 1.0;
             this.ttsSpeedDisplay.textContent = (this.app.ttsSpeed || 1.0).toFixed(1);
+        }
+    }
+
+    updateVoiceDropdown() {
+        if (!this.ttsVoiceSelect) return;
+        this.ttsVoiceSelect.innerHTML = '';
+
+        const engine = this.app.ttsEngine || 'piper';
+        if (engine === 'piper') {
+            const piperVoices = [
+                { value: 'zh_CN-huayan-medium', name: '胡燕 (溫柔女聲)' },
+                { value: 'zh_CN-pmsurvey-medium', name: '專業女聲' },
+                { value: 'zh_CN-yunjie-medium', name: '雲捷 (清亮男聲)' },
+                { value: 'zh_CN-yunye-medium', name: '雲野 (沉穩男聲)' }
+            ];
+            piperVoices.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.value;
+                opt.textContent = v.name;
+                this.ttsVoiceSelect.appendChild(opt);
+            });
+            this.ttsVoiceSelect.value = this.app.ttsVoice || 'zh_CN-huayan-medium';
+        } else if (engine === 'webspeech') {
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length === 0) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = '載入系統語音中...';
+                this.ttsVoiceSelect.appendChild(opt);
+                
+                window.speechSynthesis.addEventListener('voiceschanged', () => {
+                    this.updateVoiceDropdown();
+                }, { once: true });
+                return;
+            }
+
+            voices.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.voiceURI;
+                opt.textContent = `${v.name} (${v.lang})`;
+                this.ttsVoiceSelect.appendChild(opt);
+            });
+
+            const voiceExists = voices.some(v => v.voiceURI === this.app.ttsVoice);
+            if (voiceExists) {
+                this.ttsVoiceSelect.value = this.app.ttsVoice;
+            } else {
+                const zhVoice = voices.find(v => v.lang.includes('zh') || v.lang.includes('ZH'));
+                if (zhVoice) {
+                    this.ttsVoiceSelect.value = zhVoice.voiceURI;
+                    this.app.ttsVoice = zhVoice.voiceURI;
+                    this.app.saveState({ ttsVoice: zhVoice.voiceURI });
+                } else if (voices.length > 0) {
+                    this.ttsVoiceSelect.value = voices[0].voiceURI;
+                    this.app.ttsVoice = voices[0].voiceURI;
+                    this.app.saveState({ ttsVoice: voices[0].voiceURI });
+                }
+            }
         }
     }
 
@@ -190,6 +246,7 @@ class ZenSettings {
         if (this.ttsEngineSelect) {
             this.ttsEngineSelect.addEventListener('change', (e) => {
                 this.app.setTTSEngine(e.target.value);
+                this.updateVoiceDropdown();
             });
         }
         if (this.ttsVoiceSelect) {
