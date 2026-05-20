@@ -56,7 +56,9 @@ class ZenTTS {
 
         // If we switched engines while playing, we need to restart the current page
         if (wasPlaying && this._lastReadingText) {
-            this._resetAndPlayCurrentPage(false);
+            this.isPlaying = true;
+            this.chunks = null; // force re-prepare
+            document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: { action: 'requestReadingOver' } }));
         }
     }
 
@@ -85,6 +87,12 @@ class ZenTTS {
                 artwork: [{ src: 'icon.svg', sizes: '512x512', type: 'image/svg+xml' }]
             });
             navigator.mediaSession.playbackState = this.isPlaying ? 'playing' : (this.isPaused ? 'paused' : 'none');
+        }
+
+        // WebSpeech API might cause the OS to duck or pause HTML5 audio.
+        // We must forcefully keep the silent audio loop alive to retain lock screen controls.
+        if (this.isPlaying && this.audioPlayer && this.audioPlayer.paused) {
+            this.audioPlayer.play().catch(e => console.warn('Silent audio play blocked:', e));
         }
     }
 
