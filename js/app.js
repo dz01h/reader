@@ -124,7 +124,10 @@ class ZenReaderApp {
                     if (this.els.ttsSpeed) this.els.ttsSpeed.value = this.ttsSpeed;
                 }
                 if (state.ttsVoice) this.ttsVoice = state.ttsVoice;
-                if (state.ttsEngine) this.ttsEngine = state.ttsEngine;
+                if (state.ttsEngine) {
+                    this.ttsEngine = state.ttsEngine;
+                    if (this.tts) this.tts.switchEngine(this.ttsEngine);
+                }
                 
                 if (state.quadTL) this.quadTL = state.quadTL;
                 if (state.quadTR) this.quadTR = state.quadTR;
