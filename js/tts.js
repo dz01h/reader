@@ -50,6 +50,8 @@ class ZenTTS {
 
         if (engineType === 'webspeech' && window.ZenTTSWebSpeech) {
             this.ttsEngine = new window.ZenTTSWebSpeech(this.app);
+        } else if (engineType === 'kokoro' && window.ZenTTSKokoro) {
+            this.ttsEngine = new window.ZenTTSKokoro(this.app);
         } else if (window.ZenTTSPiper) {
             this.ttsEngine = new window.ZenTTSPiper(this.app);
         }

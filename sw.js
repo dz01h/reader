@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-reader-v9';
+const CACHE_NAME = 'zen-reader-v15';
 const urlsToCache = [
   './',
   './index.html',
@@ -16,7 +16,10 @@ const urlsToCache = [
   './js/tts.js',
   './js/tts/chunks.js',
   './js/tts/piper.js',
-  './js/tts/piper-worker.js'
+  './js/tts/piper-worker.js',
+  './js/tts/webspeech.js',
+  './js/tts/kokoro.js',
+  './js/tts/kokoro-worker.js'
 ];
 
 self.addEventListener('install', event => {
@@ -51,7 +54,7 @@ self.addEventListener('fetch', event => {
       try {
         const cache = await caches.open(CACHE_NAME);
         const cachedResponse = await cache.match(event.request);
-        
+
         // 對於 CDN 資源，採 Cache-First 策略以確保穩定與離線使用
         if (isCDNHost && cachedResponse) {
           return cachedResponse;
@@ -63,7 +66,7 @@ self.addEventListener('fetch', event => {
             if (networkResponse && networkResponse.status === 200) {
               cache.put(event.request, networkResponse.clone());
             }
-          }).catch(() => {}); 
+          }).catch(() => {});
           return cachedResponse;
         }
 

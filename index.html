@@ -221,19 +221,9 @@
             <fieldset class="setting-fieldset">
                 <legend data-i18n="settingTTSGroup">TTS 語音設定</legend>
                 <div class="setting-group">
-                    <label for="setting-tts-engine" data-i18n="settingTTSEngine">語音引擎</label>
-                    <select id="setting-tts-engine" style="width: 100%;">
-                        <option value="piper">Piper (離線高音質 AI)</option>
-                        <option value="webspeech">Web Speech API (系統原生/極度省電)</option>
-                    </select>
-                </div>
-                <div class="setting-group">
-                    <label for="setting-tts-voice" data-i18n="settingTTSVoice">語音模型</label>
-                    <select id="setting-tts-voice" style="width: 100%;">
-                        <option value="zh_CN-huayan-medium">胡燕 (溫柔女聲)</option>
-                        <option value="zh_CN-pmsurvey-medium">專業女聲</option>
-                        <option value="zh_CN-yunjie-medium">雲捷 (清亮男聲)</option>
-                        <option value="zh_CN-yunye-medium">雲野 (沉穩男聲)</option>
+                    <label for="setting-tts-model" data-i18n="settingTTSModel">語音引擎與模型</label>
+                    <select id="setting-tts-model" style="width: 100%;">
+                        <!-- Will be populated dynamically -->
                     </select>
                 </div>
                 <div class="setting-group">
@@ -292,6 +282,7 @@
     <script src="js/tts/chunks.js"></script>
     <script src="js/tts/piper.js"></script>
     <script src="js/tts/webspeech.js"></script>
+    <script src="js/tts/kokoro.js"></script>
     <script src="js/tts.js"></script>
     <script src="js/reading-log.js"></script>
     <script src="js/reading-panel.js"></script>

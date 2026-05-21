@@ -27,6 +27,7 @@ const translations = {
         fontMono: '等寬字體',
         settingFontSize: '字體大小: ',
         settingLineHeight: '行距: ',
+        settingTTSModel: '語音引擎與模型',
         
         settingQuadrants: '點擊四象限 (隱形換頁按鈕)',
         quadTL: '左上角',
@@ -80,6 +81,7 @@ const translations = {
         fontMono: '等宽字体',
         settingFontSize: '字体大小: ',
         settingLineHeight: '行距: ',
+        settingTTSModel: '语音引擎与模型',
         
         settingQuadrants: '点击四象限 (隐形换页按钮)',
         quadTL: '左上角',
@@ -133,6 +135,7 @@ const translations = {
         fontMono: 'Monospace',
         settingFontSize: 'Font Size: ',
         settingLineHeight: 'Line Height: ',
+        settingTTSModel: 'TTS Engine & Model',
         
         settingQuadrants: 'Tap Quadrants (Invisible page turners)',
         quadTL: 'Top Left',
@@ -186,6 +189,7 @@ const translations = {
         fontMono: '等幅フォント',
         settingFontSize: 'フォントサイズ: ',
         settingLineHeight: '行間: ',
+        settingTTSModel: '音声エンジンと言語モデル',
         
         settingQuadrants: 'タップ領域 (ページめくり)',
         quadTL: '左上',

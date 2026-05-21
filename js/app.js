@@ -10,18 +10,18 @@ class ZenReaderApp {
         this.ttsSpeed = 1.0;
         this.ttsVoice = 'zh_CN-huayan-medium';
         this.ttsEngine = 'piper';
-        
+
         // Touch Quadrants
         this.quadTL = 'prev';
         this.quadTR = 'next';
         this.quadBL = 'prev';
         this.quadBR = 'next';
-        
+
         this.STATE_KEY = 'zen_reader_state';
-        
+
         this.syncCooldown = 15; // default 15 minutes
         this.lastSyncTime = 0;
-        
+
         // Ensure dependencies are loaded
         if (!window.ZenDB || !window.ZenEngine || !window.ReadingPanel || !window.ZenTTS) {
             console.error("Required module classes (ZenDB, ZenEngine, ReadingPanel, ZenTTS) are missing!");
@@ -32,16 +32,16 @@ class ZenReaderApp {
         if (window.I18n) {
             this.i18n = new window.I18n();
         }
-        
+
         this.db = new window.ZenDB();
-        
+
         this.initDOM();
-        
+
         // Initialize Core Components
         this.readingPanel = new window.ReadingPanel(this, this.els.canvas);
         this.engine = this.readingPanel.engine;
         this.tts = new window.ZenTTS(this);
-        
+
         // GDrive module
         if (window.ZenGDrive) {
             this.gdrive = new window.ZenGDrive(this);
@@ -51,17 +51,17 @@ class ZenReaderApp {
         if (window.ZenReadingLog) {
             this.readingLog = new window.ZenReadingLog(this.gdrive);
         }
-        
+
         // Settings Dialog module
         if (window.ZenSettings) {
              this.settings = new window.ZenSettings(this);
         }
-        
+
         // File Explorer module
         if (window.FileExplorer) {
              this.explorer = new window.FileExplorer(this);
         }
-        
+
         // Zip Handler module
         if (window.ZenZipHandler) {
              this.zipHandler = new window.ZenZipHandler(this);
@@ -77,21 +77,21 @@ class ZenReaderApp {
 
     initDOM() {
         this.els = {
-            dropZone: document.getElementById('welcome-screen'), 
+            dropZone: document.getElementById('welcome-screen'),
             fileInput: document.getElementById('file-input'),
             btnUpload: document.getElementById('btn-upload'),
             btnGDrive: document.getElementById('btn-gdrive'),
             readerContainer: document.getElementById('reader-container'),
             documentTitle: document.getElementById('document-title'),
             canvas: document.getElementById('reader-canvas'),
-            
+
             btnCloseReader: document.getElementById('btn-close-reader'),
             headerCenter: document.getElementById('header-center'),
-            
+
             statusBar: document.getElementById('status-bar'),
             progressSlider: document.getElementById('progress-slider'),
             pageIndicator: document.getElementById('page-indicator'),
-            
+
             ttsSpeed: document.getElementById('tts-speed')
         };
     }
@@ -107,7 +107,7 @@ class ZenReaderApp {
                     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                     document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
                 }
-                
+
                 if (state.fontSize) this.currentFontSize = state.fontSize;
                 if (state.writingMode) {
                     this.currentWritingMode = state.writingMode;
@@ -123,14 +123,38 @@ class ZenReaderApp {
                     this.ttsSpeed = state.ttsSpeed;
                     if (this.els.ttsSpeed) this.els.ttsSpeed.value = this.ttsSpeed;
                 }
-                if (state.ttsVoice) this.ttsVoice = state.ttsVoice;
                 if (state.ttsEngine) this.ttsEngine = state.ttsEngine;
-                
+                if (state.ttsVoice) this.ttsVoice = state.ttsVoice;
+
+                // Validate loaded voice to prevent worker crash loop from invalid/deprecated values
+                if (this.ttsEngine === 'piper') {
+                    const validPiper = ['zh_CN-huayan-medium', 'zh_CN-huayan-x_low'];
+                    if (!validPiper.includes(this.ttsVoice)) {
+                        this.ttsVoice = 'zh_CN-huayan-medium';
+                    }
+                } else if (this.ttsEngine === 'kokoro') {
+                    // v1.0 model voices (English only)
+                    const validKokoro = [
+                        'af_heart', 'af_bella', 'af_sarah', 'af_sky',
+                        'af_alloy', 'af_aoede', 'af_jessica', 'af_kore', 'af_nicole', 'af_nova', 'af_river',
+                        'am_adam', 'am_michael', 'am_echo', 'am_eric', 'am_fenrir', 'am_liam', 'am_onyx', 'am_puck', 'am_santa',
+                        'bf_emma', 'bf_isabella', 'bf_alice', 'bf_lily',
+                        'bm_george', 'bm_lewis', 'bm_daniel', 'bm_fable'
+                    ];
+                    if (!validKokoro.includes(this.ttsVoice)) {
+                        this.ttsVoice = 'af_heart';
+                    }
+                }
+
+                if (this.ttsEngine && this.tts) {
+                    this.tts.switchEngine(this.ttsEngine);
+                }
+
                 if (state.quadTL) this.quadTL = state.quadTL;
                 if (state.quadTR) this.quadTR = state.quadTR;
                 if (state.quadBL) this.quadBL = state.quadBL;
                 if (state.quadBR) this.quadBR = state.quadBR;
-                
+
                 if (state.lang && this.i18n) {
                     this.i18n.setLanguage(state.lang);
                 } else if (this.i18n) {
@@ -149,7 +173,7 @@ class ZenReaderApp {
             this.loadBookIntoReader(book);
             this.showToast(`已載入上次閱讀的書籍`);
         }
-        
+
         this.updateThemeColor();
     }
 
@@ -167,13 +191,13 @@ class ZenReaderApp {
         const scrollOffset = this.readingPanel.scrollOffset;
         const maxScroll = this.readingPanel.maxScroll;
         const progress = maxScroll > 0 ? scrollOffset / maxScroll : 0;
-        
+
         this.currentBook.saveProgress(progress);
     }
 
     rebuildAndShow(targetScroll = 0) {
         if (!this.currentBook) return;
-        
+
         const rect = this.els.canvas.getBoundingClientRect();
         // Use Math.floor to ensure integer dimensions for the layout engine
         const cw = Math.floor(rect.width);
@@ -188,7 +212,7 @@ class ZenReaderApp {
             this.currentFontFamily,
             this.margins
         );
-        
+
         this.readingPanel.setLayout(drawOps, maxScroll, targetScroll);
         this.els.statusBar.classList.remove('hidden');
     }
@@ -208,12 +232,12 @@ class ZenReaderApp {
     loadBookIntoReader(book) {
         this.currentBook = book;
         this.els.documentTitle.textContent = book.filename;
-        
+
         if (this.readingLog) {
             this.readingLog.setReadingBook(book.filename);
             this.readingLog.setCooldown(this.syncCooldown);
         }
-        
+
         document.body.classList.add('reading-mode');
         document.body.classList.remove('ui-hidden');
         this.updateThemeColor();
@@ -221,12 +245,12 @@ class ZenReaderApp {
         this.els.dropZone.classList.add('hidden');
         this.els.readerContainer.classList.remove('hidden');
         this.els.headerCenter.classList.remove('hidden');
-        
+
         this.readingPanel.resize();
-        
+
         const targetProgress = book.progress || 0;
-        
-        this.rebuildAndShow(0); 
+
+        this.rebuildAndShow(0);
         this.readingPanel.setScrollOffset(this.readingPanel.maxScroll * targetProgress);
 
         if (this.gdrive) {
@@ -242,14 +266,14 @@ class ZenReaderApp {
         this.els.readerContainer.classList.add('hidden');
         this.els.headerCenter.classList.add('hidden');
         this.els.dropZone.classList.remove('hidden');
-        this.els.statusBar.classList.add('hidden'); 
+        this.els.statusBar.classList.add('hidden');
         this.els.documentTitle.textContent = '';
         if (this.currentBook) {
             await this.currentBook.deleteFromDB(this.db);
             this.currentBook = null;
         }
         this.els.fileInput.value = '';
-        
+
         this.readingPanel.reset();
     }
 
@@ -257,11 +281,11 @@ class ZenReaderApp {
         const el = document.getElementById('sync-status');
         const timeEl = document.getElementById('sync-time');
         const msgEl = document.getElementById('sync-msg');
-        
+
         if (!el) return;
-        
+
         el.classList.remove('hidden', 'syncing', 'success', 'error');
-        
+
         if (status === 'syncing') {
             el.classList.add('syncing');
             msgEl.textContent = message || (this.i18n ? this.i18n.t('syncing') : 'Syncing...');
@@ -325,17 +349,17 @@ class ZenReaderApp {
 
     handleRemoteProgress(remote) {
         if (!remote || !remote.progress || !this.currentBook) return;
-        
+
         const currentSavedTs = this.currentBook.timestamp || 0;
         const localProg = this.readingPanel.maxScroll > 0 ? this.readingPanel.scrollOffset / this.readingPanel.maxScroll : 0;
-        
+
         // If remote time is older or same, ignore (unless local is 0)
         if (localProg > 0 && new Date(remote.time).getTime() <= currentSavedTs) return;
 
         if (confirm(`發現更晚的雲端進度 (${new Date(remote.time).toLocaleString()})\n進度：${(remote.progress * 100).toFixed(2)}%\n是否跳轉？`)) {
             const targetScroll = this.readingPanel.maxScroll * remote.progress;
             this.readingPanel.setScrollOffset(this.readingPanel.snapToGrid(targetScroll));
-            
+
             // update local save immediately
             this.currentBook.timestamp = new Date(remote.time).getTime();
             this.currentBook.saveProgress(remote.progress);
@@ -364,7 +388,7 @@ class ZenReaderApp {
                 else if (this.i18n.lang === 'ja-JP') fallbackEnc = 'shift-jis';
                 else if (this.i18n.lang === 'en-US') fallbackEnc = 'windows-1252';
             }
-            try { return new TextDecoder(fallbackEnc, { fatal: true }).decode(uint8array); } 
+            try { return new TextDecoder(fallbackEnc, { fatal: true }).decode(uint8array); }
             catch(e2) { return new TextDecoder(fallbackEnc).decode(uint8array); }
         }
     }
@@ -458,9 +482,23 @@ class ZenReaderApp {
     setTTSVoice(val) {
         this.ttsVoice = val;
         this.saveState({ ttsVoice: this.ttsVoice });
-        // Optional: WebSpeech API might be able to change voices dynamically, but 
+        // Optional: WebSpeech API might be able to change voices dynamically, but
         // restart ensures it picks up correctly.
         if (this.tts && this.tts.isPlaying) {
+            this.tts.stop();
+            this.tts.start();
+        }
+    }
+
+    setTTSModel(engine, voice) {
+        const engineChanged = this.ttsEngine !== engine;
+        this.ttsEngine = engine;
+        this.ttsVoice = voice;
+        this.saveState({ ttsEngine: engine, ttsVoice: voice });
+
+        if (engineChanged && this.tts) {
+            this.tts.switchEngine(engine);
+        } else if (this.tts && this.tts.isPlaying) {
             this.tts.stop();
             this.tts.start();
         }
@@ -477,9 +515,19 @@ class ZenReaderApp {
         this.els.btnCloseReader.addEventListener('click', () => this.closeReader());
         this.els.btnUpload.addEventListener('click', () => this.els.fileInput.click());
         if (this.els.btnGDrive && this.gdrive) this.els.btnGDrive.addEventListener('click', () => this.gdrive.handleAuthClick());
-        
+
         document.body.addEventListener('UpdateSyncStatus', (e) => {
             this.updateSyncStatus(e.detail.status, e.detail.message);
+        });
+
+        document.body.addEventListener('ZenTTS:Status', (e) => {
+            if (e.detail.status === 'loading') {
+                this.showToast(e.detail.message, 0);
+            } else if (e.detail.status === 'ready') {
+                this.showToast('語音引擎已就緒！', 2000);
+            } else if (e.detail.status === 'error') {
+                this.showToast(`語音載入失敗: ${e.detail.message}`, 4000);
+            }
         });
 
         document.body.addEventListener('ReadingOver', (e) => {
@@ -496,7 +544,7 @@ class ZenReaderApp {
             this.readingPanel.setScrollOffset(target);
             this.saveProgress();
         });
-        
+
         // Drop zone events
         this.els.dropZone.addEventListener('dragover', (e) => { e.preventDefault(); this.els.dropZone.classList.add('dragover'); });
         this.els.dropZone.addEventListener('dragleave', () => this.els.dropZone.classList.remove('dragover'));
@@ -515,9 +563,9 @@ class ZenReaderApp {
             this.readingPanel.setScrollOffset(this.readingPanel.snapToGrid(targetScroll));
         });
 
-        document.addEventListener('visibilitychange', () => { 
+        document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
-                this.checkAndSyncCloudProgress(); 
+                this.checkAndSyncCloudProgress();
             } else if (this.readingLog) {
                 this.readingLog.resetInit();
             }
