@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-reader-v15';
+const CACHE_NAME = 'zen-reader-v17';
 const urlsToCache = [
   './',
   './index.html',
@@ -19,7 +19,13 @@ const urlsToCache = [
   './js/tts/piper-worker.js',
   './js/tts/webspeech.js',
   './js/tts/kokoro.js',
-  './js/tts/kokoro-worker.js'
+  './js/tts/kokoro-worker.js',
+  './js/tts/sherpa.js',
+  './js/tts/sherpa-worker.js',
+  './lib/sherpa-onnx/sherpa-onnx-tts.js',
+  './lib/sherpa-onnx/sherpa-onnx-wasm-main-tts.js',
+  './lib/sherpa-onnx/sherpa-onnx-wasm-main-tts.wasm',
+  './lib/sherpa-onnx/sherpa-onnx-wasm-main-tts.data'
 ];
 
 self.addEventListener('install', event => {
@@ -40,14 +46,30 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
+function injectCOOP(res) {
+  if (res.type === 'opaque') return res;
+  const newHeaders = new Headers(res.headers);
+  newHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
+  newHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: newHeaders
+  });
+}
+
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
   const isSameOrigin = url.origin === self.location.origin;
   const isCDNHost = url.origin === 'https://cdn.jsdelivr.net';
+  const isGitHubReleases = url.hostname === 'github.com' && url.pathname.includes('/releases/download/');
+  const isHuggingFace = url.hostname === 'huggingface.co';
+  const isModelScope = url.hostname === 'modelscope.cn';
+  const isLib = isSameOrigin && url.pathname.includes('/lib/');
 
-  if (!isSameOrigin && !isCDNHost) return;
+  if (!isSameOrigin && !isCDNHost && !isGitHubReleases && !isHuggingFace && !isModelScope) return;
 
   event.respondWith(
     (async () => {
@@ -55,27 +77,24 @@ self.addEventListener('fetch', event => {
         const cache = await caches.open(CACHE_NAME);
         const cachedResponse = await cache.match(event.request);
 
-        // 對於 CDN 資源，採 Cache-First 策略以確保穩定與離線使用
-        if (isCDNHost && cachedResponse) {
-          return cachedResponse;
+        if ((isCDNHost || isGitHubReleases || isHuggingFace || isModelScope || isLib) && cachedResponse) {
+          return injectCOOP(cachedResponse);
         }
 
-        // 對於同源資源，採 Stale-While-Revalidate 策略
         if (isSameOrigin && cachedResponse) {
           fetch(event.request).then(networkResponse => {
             if (networkResponse && networkResponse.status === 200) {
               cache.put(event.request, networkResponse.clone());
             }
           }).catch(() => {});
-          return cachedResponse;
+          return injectCOOP(cachedResponse);
         }
 
         const networkResponse = await fetch(event.request);
         if (networkResponse && (networkResponse.status === 200 || networkResponse.status === 0)) {
-          // status 0 代表 opaque response (跨網域)，我們也嘗試快取它
           cache.put(event.request, networkResponse.clone());
         }
-        return networkResponse;
+        return injectCOOP(networkResponse);
       } catch (e) {
         return new Response('Network error', { status: 503 });
       }

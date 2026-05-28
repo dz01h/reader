@@ -527,6 +527,9 @@ class ZenReaderApp {
                 this.showToast('語音引擎已就緒！', 2000);
             } else if (e.detail.status === 'error') {
                 this.showToast(`語音載入失敗: ${e.detail.message}`, 4000);
+                if (this.tts && this.tts.isPlaying) {
+                    this.tts.stop();
+                }
             }
         });
 

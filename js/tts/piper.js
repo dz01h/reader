@@ -84,7 +84,7 @@ class ZenTTSPiper {
     }
 
     playBuffer(audioBuffer) {
-        if (this.audioCtx.state === 'suspended') {
+        if (this.audioCtx.state === 'suspended' && !this.isManualSuspended) {
             this.audioCtx.resume();
         }
 
@@ -118,12 +118,14 @@ class ZenTTSPiper {
     }
 
     suspendAudio() {
+        this.isManualSuspended = true;
         if (this.audioCtx && this.audioCtx.state === 'running') {
             this.audioCtx.suspend();
         }
     }
 
     resumeAudio() {
+        this.isManualSuspended = false;
         if (this.audioCtx && this.audioCtx.state === 'suspended') {
             this.audioCtx.resume();
         }
@@ -136,6 +138,7 @@ class ZenTTSPiper {
         });
         this._scheduledSources = [];
         this.nextStartTime = 0;
+        this.isManualSuspended = false;
         this.suspendAudio();
         
         if (hardClear) {

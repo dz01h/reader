@@ -7,6 +7,7 @@ class ZenTTSKokoro {
         this.nextStartTime = 0;
         this._scheduledSources = [];
         this._lastRawText = null;
+        this.isManualSuspended = false;
         this.isLoading = false;
         this.initPromise = null;
         this._pendingRequests = new Map(); // requestId -> { resolve, reject }
@@ -164,7 +165,7 @@ class ZenTTSKokoro {
     }
 
     playFloat32Audio(float32Array, sampleRate) {
-        if (this.audioCtx.state === 'suspended') {
+        if (this.audioCtx.state === 'suspended' && !this.isManualSuspended) {
             this.audioCtx.resume();
         }
 
@@ -219,12 +220,14 @@ class ZenTTSKokoro {
     }
 
     suspendAudio() {
+        this.isManualSuspended = true;
         if (this.audioCtx && this.audioCtx.state === 'running') {
             this.audioCtx.suspend();
         }
     }
 
     resumeAudio() {
+        this.isManualSuspended = false;
         if (this.audioCtx && this.audioCtx.state === 'suspended') {
             this.audioCtx.resume();
         }

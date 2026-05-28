@@ -43,6 +43,7 @@ class ZenSettings {
         this.ttsSpeedDisplay = document.getElementById('setting-tts-speed-display');
 
         this.btnShowDebug = document.getElementById('btn-show-debug');
+        this.btnClearCache = document.getElementById('btn-clear-cache');
         this.debugDialog = document.getElementById('debug-log-dialog');
         this.debugContent = document.getElementById('debug-log-content');
         this.btnCloseDebug = document.getElementById('btn-close-debug-log');
@@ -142,7 +143,25 @@ class ZenSettings {
         });
         this.ttsModelSelect.appendChild(kokoroGroup);
 
-        // 3. Web Speech Group
+        // 3. Sherpa-ONNX Group (中文 VITS 引擎)
+        const sherpaGroup = document.createElement('optgroup');
+        sherpaGroup.label = 'Sherpa-ONNX (本地離線 AI，初次載入需下載)';
+        const sherpaVoices = [
+            { value: 'sherpa:matcha-icefall-zh-baker:0', name: 'Matcha Baker (高速純中文)' },
+            { value: 'sherpa:matcha-icefall-zh-en:0', name: 'Matcha 中英雙語 (高速)' },
+            { value: 'sherpa:kokoro-multi-lang-v1_1:0', name: 'Kokoro 中英文 (高音質)' },
+            { value: 'sherpa:vits-melo-tts-zh_en:0', name: 'MeloTTS 中英雙語' },
+            { value: 'sherpa:vits-zh-hf-fanchen-c:0', name: 'VITS FanChen-C (純中文女聲)' },
+            { value: 'sherpa:vits-zh-hf-eula:0',   name: 'EULA 語音包 (女聲)' },
+            { value: 'sherpa:vits-zh-ll:0', name: 'LL 語音包 (女聲)' },
+        ];
+        sherpaVoices.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.value;
+            opt.textContent = v.name;
+            sherpaGroup.appendChild(opt);
+        });
+        this.ttsModelSelect.appendChild(sherpaGroup);
         const webSpeechGroup = document.createElement('optgroup');
         webSpeechGroup.label = 'Web Speech API (系統原生/極度省電)';
 
@@ -174,8 +193,9 @@ class ZenSettings {
             this.ttsModelSelect.value = currentSelection;
         } else {
             this.ttsModelSelect.value = 'piper:zh_CN-huayan-medium';
-            const [engine, voice] = this.ttsModelSelect.value.split(':');
-            this.app.setTTSModel(engine, voice);
+            const fbVal = this.ttsModelSelect.value;
+            const fbIdx = fbVal.indexOf(':');
+            this.app.setTTSModel(fbVal.substring(0, fbIdx), fbVal.substring(fbIdx + 1));
         }
     }
 
@@ -268,7 +288,10 @@ class ZenSettings {
             this.ttsModelSelect.addEventListener('change', async (e) => {
                 const fullValue = e.target.value;
                 if (!fullValue) return;
-                const [engine, voice] = fullValue.split(':');
+                // 格式可能是 'engine:voice' 或 'engine:model:sid'（sherpa 格式）
+                const colonIdx = fullValue.indexOf(':');
+                const engine = fullValue.substring(0, colonIdx);
+                const voice = fullValue.substring(colonIdx + 1); // 保留完整的 voice 部分
                 const oldEngine = this.app.ttsEngine;
 
                 // Set model in app state
@@ -303,6 +326,23 @@ class ZenSettings {
                 const logs = JSON.parse(localStorage.getItem('zen_tts_debug_log') || '[]');
                 this.debugContent.textContent = logs.join('\n');
                 this.debugDialog.showModal();
+            });
+        }
+
+        if (this.btnClearCache) {
+            this.btnClearCache.addEventListener('click', async () => {
+                if (confirm('確定要清除所有離線快取嗎？（下次開啟時將需要重新下載模型與資源）')) {
+                    if ('caches' in window) {
+                        try {
+                            const keys = await caches.keys();
+                            await Promise.all(keys.map(key => caches.delete(key)));
+                            this.app.showToast('離線快取已清除！請重新整理網頁。');
+                        } catch (e) {
+                            console.error('Clear cache error:', e);
+                            this.app.showToast('清除快取失敗。');
+                        }
+                    }
+                }
             });
         }
 
