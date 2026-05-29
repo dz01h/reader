@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-reader-v10';
+const CACHE_NAME = 'zen-reader-v35';
 const urlsToCache = [
   './',
   './index.html',
@@ -16,8 +16,15 @@ const urlsToCache = [
   './js/app.js',
   './js/tts.js',
   './js/tts/chunks.js',
-  './js/tts/piper.js',
-  './js/tts/piper-worker.js'
+  './js/tts/webspeech.js',
+  './js/tts/matcha.js',
+  './js/tts/matcha-worker.js',
+  './js/tts/custom-dict.js',
+  'https://cdn.jsdelivr.net/npm/pinyin-pro@3.24.2/dist/index.js',
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js',
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort-wasm-simd-threaded.wasm',
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort-wasm-simd.wasm',
+
 ];
 
 self.addEventListener('install', event => {
@@ -38,40 +45,74 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
+self.addEventListener('message', async event => {
+  if (event.data && event.data.type === 'UPDATE_TTS_DICT' && event.data.payload) {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      const req = new Request('./js/tts/custom-dict.js');
+      const cachedResponse = await cache.match(req);
+      if (cachedResponse) {
+        let text = await cachedResponse.text();
+        const injected = `\nObject.assign(self.ZenTTSCustomDict, ${JSON.stringify(event.data.payload)});`;
+        if (!text.includes(injected)) {
+            text += injected;
+            const newRes = new Response(text, {
+                headers: cachedResponse.headers
+            });
+            await cache.put(req, newRes);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to update cache with TTS dict', e);
+    }
+  }
+});
+
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
   const isSameOrigin = url.origin === self.location.origin;
   const isCDNHost = url.origin === 'https://cdn.jsdelivr.net';
+  const isGitHubReleases = url.hostname === 'github.com' && url.pathname.includes('/releases/download/');
+  const isHuggingFace = url.hostname === 'huggingface.co';
+  const isModelScope = url.hostname === 'modelscope.cn';
+  const isLib = isSameOrigin && url.pathname.includes('/lib/');
 
-  if (!isSameOrigin && !isCDNHost) return;
+  if (!isSameOrigin && !isCDNHost && !isGitHubReleases && !isHuggingFace && !isModelScope) return;
 
   event.respondWith(
     (async () => {
       try {
         const cache = await caches.open(CACHE_NAME);
         const cachedResponse = await cache.match(event.request);
-        
-        // 對於 CDN 資源，採 Cache-First 策略以確保穩定與離線使用
-        if (isCDNHost && cachedResponse) {
+
+        if ((isCDNHost || isGitHubReleases || isHuggingFace || isModelScope || isLib) && cachedResponse) {
           return cachedResponse;
         }
 
-        // 對於同源資源，採 Stale-While-Revalidate 策略
         if (isSameOrigin && cachedResponse) {
           fetch(event.request).then(networkResponse => {
             if (networkResponse && networkResponse.status === 200) {
               cache.put(event.request, networkResponse.clone());
+              if (url.pathname.endsWith('/js/tts/custom-dict.js')) {
+                self.clients.matchAll().then(clients => {
+                  clients.forEach(client => client.postMessage({ type: 'REQUEST_TTS_SYNC' }));
+                });
+              }
             }
-          }).catch(() => {}); 
+          }).catch(() => {});
           return cachedResponse;
         }
 
         const networkResponse = await fetch(event.request);
         if (networkResponse && (networkResponse.status === 200 || networkResponse.status === 0)) {
-          // status 0 代表 opaque response (跨網域)，我們也嘗試快取它
           cache.put(event.request, networkResponse.clone());
+          if (url.pathname.endsWith('/js/tts/custom-dict.js')) {
+            self.clients.matchAll().then(clients => {
+              clients.forEach(client => client.postMessage({ type: 'REQUEST_TTS_SYNC' }));
+            });
+          }
         }
         return networkResponse;
       } catch (e) {

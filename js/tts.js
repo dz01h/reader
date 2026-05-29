@@ -65,8 +65,8 @@ class ZenTTS {
 
         if (engineType === 'webspeech' && window.ZenTTSWebSpeech) {
             this.ttsEngine = new window.ZenTTSWebSpeech(this.app);
-        } else if (window.ZenTTSPiper) {
-            this.ttsEngine = new window.ZenTTSPiper(this.app);
+        } else if (engineType === 'matcha' && window.ZenTTSMatcha) {
+            this.ttsEngine = new window.ZenTTSMatcha(this.app);
         }
 
         // Old chunks belong to the destroyed engine, discard them

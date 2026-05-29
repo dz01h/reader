@@ -9,7 +9,7 @@ class ZenSettings {
         this.dialog = document.getElementById('settings-dialog');
         this.btnOpen = document.getElementById('btn-open-settings');
         this.btnClose = document.getElementById('btn-close-settings');
-        
+
         this.themeSelect = document.getElementById('setting-theme');
         this.directionSelect = document.getElementById('setting-direction');
         this.fontFamilySelect = document.getElementById('setting-font-family');
@@ -25,25 +25,25 @@ class ZenSettings {
         this.marginLeftDisplay = document.getElementById('setting-margin-left-display');
         this.marginRightInput = document.getElementById('setting-margin-right');
         this.marginRightDisplay = document.getElementById('setting-margin-right-display');
-        
+
         this.quadTLSelect = document.getElementById('setting-quad-tl');
         this.quadTRSelect = document.getElementById('setting-quad-tr');
         this.quadBLSelect = document.getElementById('setting-quad-bl');
         this.quadBRSelect = document.getElementById('setting-quad-br');
         this.langSelect = document.getElementById('setting-lang');
-        
+
         this.btnSyncQr = document.getElementById('btn-sync-qr');
         this.btnGasAuth = document.getElementById('btn-gas-auth');
         this.syncCooldownSelect = document.getElementById('setting-sync-cooldown');
         this.qrContainer = document.getElementById('qr-container');
         this.qrCodeEl = document.getElementById('qr-code');
 
-        this.ttsEngineSelect = document.getElementById('setting-tts-engine');
-        this.ttsVoiceSelect = document.getElementById('setting-tts-voice');
+        this.ttsModelSelect = document.getElementById('setting-tts-model');
         this.ttsSpeedSlider = document.getElementById('setting-tts-speed-slider');
         this.ttsSpeedDisplay = document.getElementById('setting-tts-speed-display');
 
         this.btnShowDebug = document.getElementById('btn-show-debug');
+        this.btnClearCache = document.getElementById('btn-clear-cache');
         this.debugDialog = document.getElementById('debug-log-dialog');
         this.debugContent = document.getElementById('debug-log-content');
         this.btnCloseDebug = document.getElementById('btn-close-debug-log');
@@ -76,12 +76,12 @@ class ZenSettings {
                 this.marginRightDisplay.textContent = this.app.margins.right;
             }
         }
-        
+
         this.quadTLSelect.value = this.app.quadTL;
         this.quadTRSelect.value = this.app.quadTR;
         this.quadBLSelect.value = this.app.quadBL;
         this.quadBRSelect.value = this.app.quadBR;
-        
+
         if (this.app.i18n && this.langSelect) {
             this.langSelect.value = this.app.i18n.lang;
         }
@@ -90,71 +90,70 @@ class ZenSettings {
             this.syncCooldownSelect.value = this.app.syncCooldown;
         }
 
-        if (this.ttsEngineSelect) {
-            this.ttsEngineSelect.value = this.app.ttsEngine || 'piper';
-        }
-        this.updateVoiceDropdown();
+        this.updateModelDropdown();
         if (this.ttsSpeedSlider) {
             this.ttsSpeedSlider.value = this.app.ttsSpeed || 1.0;
             this.ttsSpeedDisplay.textContent = (this.app.ttsSpeed || 1.0).toFixed(1);
         }
     }
 
-    updateVoiceDropdown() {
-        if (!this.ttsVoiceSelect) return;
-        this.ttsVoiceSelect.innerHTML = '';
+    updateModelDropdown() {
+        if (!this.ttsModelSelect) return;
 
-        const engine = this.app.ttsEngine || 'piper';
-        if (engine === 'piper') {
-            const piperVoices = [
-                { value: 'zh_CN-huayan-medium', name: '胡燕 (溫柔女聲)' },
-                { value: 'zh_CN-pmsurvey-medium', name: '專業女聲' },
-                { value: 'zh_CN-yunjie-medium', name: '雲捷 (清亮男聲)' },
-                { value: 'zh_CN-yunye-medium', name: '雲野 (沉穩男聲)' }
-            ];
-            piperVoices.forEach(v => {
-                const opt = document.createElement('option');
-                opt.value = v.value;
-                opt.textContent = v.name;
-                this.ttsVoiceSelect.appendChild(opt);
-            });
-            this.ttsVoiceSelect.value = this.app.ttsVoice || 'zh_CN-huayan-medium';
-        } else if (engine === 'webspeech') {
-            const voices = window.speechSynthesis.getVoices();
-            if (voices.length === 0) {
-                const opt = document.createElement('option');
-                opt.value = '';
-                opt.textContent = '載入系統語音中...';
-                this.ttsVoiceSelect.appendChild(opt);
-                
-                window.speechSynthesis.addEventListener('voiceschanged', () => {
-                    this.updateVoiceDropdown();
-                }, { once: true });
-                return;
-            }
+        // Save current selection to restore it after rebuilding
+        const currentSelection = this.ttsModelSelect.value || `${this.app.ttsEngine || 'piper'}:${this.app.ttsVoice || 'zh_CN-huayan-medium'}`;
 
+        this.ttsModelSelect.innerHTML = '';
+
+
+        // 4. Matcha Group (獨立的高速 TTS 引擎)
+        const matchaGroup = document.createElement('optgroup');
+        matchaGroup.label = 'Matcha TTS (獨立引擎)';
+        const matchaVoices = [
+            { value: 'matcha:matcha-icefall-zh-baker:0', name: 'Matcha Baker (高速純中文)' },
+            { value: 'matcha:matcha-icefall-zh-en:0', name: 'Matcha 中英雙語 (高速)' }
+        ];
+        matchaVoices.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v.value;
+            opt.textContent = v.name;
+            matchaGroup.appendChild(opt);
+        });
+        this.ttsModelSelect.appendChild(matchaGroup);
+        const webSpeechGroup = document.createElement('optgroup');
+        webSpeechGroup.label = 'Web Speech API (系統原生/極度省電)';
+
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = '載入系統語音中...';
+            webSpeechGroup.appendChild(opt);
+            this.ttsModelSelect.appendChild(webSpeechGroup);
+
+            window.speechSynthesis.addEventListener('voiceschanged', () => {
+                this.updateModelDropdown();
+            }, { once: true });
+        } else {
             voices.forEach(v => {
                 const opt = document.createElement('option');
-                opt.value = v.voiceURI;
+                opt.value = `webspeech:${v.voiceURI}`;
                 opt.textContent = `${v.name} (${v.lang})`;
-                this.ttsVoiceSelect.appendChild(opt);
+                webSpeechGroup.appendChild(opt);
             });
+            this.ttsModelSelect.appendChild(webSpeechGroup);
+        }
 
-            const voiceExists = voices.some(v => v.voiceURI === this.app.ttsVoice);
-            if (voiceExists) {
-                this.ttsVoiceSelect.value = this.app.ttsVoice;
-            } else {
-                const zhVoice = voices.find(v => v.lang.includes('zh') || v.lang.includes('ZH'));
-                if (zhVoice) {
-                    this.ttsVoiceSelect.value = zhVoice.voiceURI;
-                    this.app.ttsVoice = zhVoice.voiceURI;
-                    this.app.saveState({ ttsVoice: zhVoice.voiceURI });
-                } else if (voices.length > 0) {
-                    this.ttsVoiceSelect.value = voices[0].voiceURI;
-                    this.app.ttsVoice = voices[0].voiceURI;
-                    this.app.saveState({ ttsVoice: voices[0].voiceURI });
-                }
-            }
+        // Restore selection or find nearest fallback
+        const options = Array.from(this.ttsModelSelect.options);
+        const hasOption = options.some(o => o.value === currentSelection);
+        if (hasOption) {
+            this.ttsModelSelect.value = currentSelection;
+        } else {
+            this.ttsModelSelect.value = 'piper:zh_CN-huayan-medium';
+            const fbVal = this.ttsModelSelect.value;
+            const fbIdx = fbVal.indexOf(':');
+            this.app.setTTSModel(fbVal.substring(0, fbIdx), fbVal.substring(fbIdx + 1));
         }
     }
 
@@ -233,8 +232,8 @@ class ZenSettings {
         this.quadTRSelect.addEventListener('change', (e) => this.app.setQuad('TR', e.target.value));
         this.quadBLSelect.addEventListener('change', (e) => this.app.setQuad('BL', e.target.value));
         this.quadBRSelect.addEventListener('change', (e) => this.app.setQuad('BR', e.target.value));
-        
-        
+
+
         if (this.langSelect) {
             this.langSelect.addEventListener('change', (e) => this.app.setLanguage(e.target.value));
         }
@@ -243,15 +242,23 @@ class ZenSettings {
             this.syncCooldownSelect.addEventListener('change', (e) => this.app.setSyncCooldown(e.target.value));
         }
 
-        if (this.ttsEngineSelect) {
-            this.ttsEngineSelect.addEventListener('change', (e) => {
-                this.app.setTTSEngine(e.target.value);
-                this.updateVoiceDropdown();
-            });
-        }
-        if (this.ttsVoiceSelect) {
-            this.ttsVoiceSelect.addEventListener('change', (e) => {
-                this.app.setTTSVoice(e.target.value);
+        if (this.ttsModelSelect) {
+            this.ttsModelSelect.addEventListener('change', async (e) => {
+                const fullValue = e.target.value;
+                if (!fullValue) return;
+                // 格式可能是 'engine:voice' 或 'engine:model:sid'（sherpa 格式）
+                const colonIdx = fullValue.indexOf(':');
+                const engine = fullValue.substring(0, colonIdx);
+                const voice = fullValue.substring(colonIdx + 1); // 保留完整的 voice 部分
+                const oldEngine = this.app.ttsEngine;
+
+                // Set model in app state
+                this.app.setTTSModel(engine, voice);
+
+                // Clear old engine cache if engine type changed
+                if (oldEngine && oldEngine !== engine) {
+                    await this.clearOldEngineCache(oldEngine);
+                }
             });
         }
         if (this.ttsSpeedSlider) {
@@ -277,6 +284,23 @@ class ZenSettings {
                 const logs = JSON.parse(localStorage.getItem('zen_tts_debug_log') || '[]');
                 this.debugContent.textContent = logs.join('\n');
                 this.debugDialog.showModal();
+            });
+        }
+
+        if (this.btnClearCache) {
+            this.btnClearCache.addEventListener('click', async () => {
+                if (confirm('確定要清除所有離線快取嗎？（下次開啟時將需要重新下載模型與資源）')) {
+                    if ('caches' in window) {
+                        try {
+                            const keys = await caches.keys();
+                            await Promise.all(keys.map(key => caches.delete(key)));
+                            this.app.showToast('離線快取已清除！請重新整理網頁。');
+                        } catch (e) {
+                            console.error('Clear cache error:', e);
+                            this.app.showToast('清除快取失敗。');
+                        }
+                    }
+                }
             });
         }
 
@@ -318,7 +342,7 @@ class ZenSettings {
 
     generateSyncQR(e) {
         e.preventDefault();
-        
+
         if (this.qrContainer.classList.contains('hidden')) {
             this.qrContainer.classList.remove("hidden");
             this.qrCodeEl.innerHTML = "";
@@ -329,14 +353,14 @@ class ZenSettings {
                 lineHeight: this.app.currentLineHeight,
                 margins: this.app.margins
             };
-            
+
             // Encode
             const payload = btoa(JSON.stringify(state));
-            
+
             // Construct sync URL using github pages base path (window.location.origin + pathname)
             const baseUrl = window.location.origin + window.location.pathname;
             const syncUrl = `${baseUrl}?sync=${payload}`;
-            
+
             new QRCode(this.qrCodeEl, {
                 text: syncUrl,
                 width: 200,
@@ -347,6 +371,25 @@ class ZenSettings {
             });
         } else {
             this.qrContainer.classList.add('hidden');
+        }
+    }
+
+    async clearOldEngineCache(oldEngine) {
+        if (!oldEngine) return;
+        try {
+            const cacheNames = await caches.keys();
+            for (const name of cacheNames) {
+                if (oldEngine === 'piper' && (name.includes('vits') || name.includes('piper'))) {
+                    await caches.delete(name);
+                    console.log(`[Cache Cleanup] Deleted Piper cache: ${name}`);
+                }
+                if (oldEngine === 'kokoro' && (name.includes('transformers') || name.includes('onnx') || name.includes('kokoro'))) {
+                    await caches.delete(name);
+                    console.log(`[Cache Cleanup] Deleted Kokoro cache: ${name}`);
+                }
+            }
+        } catch (err) {
+            console.warn('[Cache Cleanup] Failed to clear old engine cache:', err);
         }
     }
 }

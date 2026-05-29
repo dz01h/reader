@@ -221,19 +221,9 @@
             <fieldset class="setting-fieldset">
                 <legend data-i18n="settingTTSGroup">TTS 語音設定</legend>
                 <div class="setting-group">
-                    <label for="setting-tts-engine" data-i18n="settingTTSEngine">語音引擎</label>
-                    <select id="setting-tts-engine" style="width: 100%;">
-                        <option value="piper">Piper (離線高音質 AI)</option>
-                        <option value="webspeech">Web Speech API (系統原生/極度省電)</option>
-                    </select>
-                </div>
-                <div class="setting-group">
-                    <label for="setting-tts-voice" data-i18n="settingTTSVoice">語音模型</label>
-                    <select id="setting-tts-voice" style="width: 100%;">
-                        <option value="zh_CN-huayan-medium">胡燕 (溫柔女聲)</option>
-                        <option value="zh_CN-pmsurvey-medium">專業女聲</option>
-                        <option value="zh_CN-yunjie-medium">雲捷 (清亮男聲)</option>
-                        <option value="zh_CN-yunye-medium">雲野 (沉穩男聲)</option>
+                    <label for="setting-tts-model" data-i18n="settingTTSModel">語音引擎與模型</label>
+                    <select id="setting-tts-model" style="width: 100%;">
+                        <!-- Will be populated dynamically -->
                     </select>
                 </div>
                 <div class="setting-group">
@@ -256,9 +246,10 @@
                     </select>
                 </div>
                 <div class="setting-group">
-                    <button id="btn-sync-qr" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnSyncQr">產生同步 QR Code</button>
+                    <button id="btn-sync-qr" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnSyncQr">顯示同步 QR Code</button>
                     <button id="btn-gas-auth" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnGasAuth">重新授權 Google 權限</button>
-                    <button id="btn-show-debug" class="btn-primary" style="width:100%; margin-top: 0.5rem;">顯示 TTS 除錯紀錄</button>
+                    <button id="btn-show-debug" class="btn-primary" style="width:100%; margin-top: 0.5rem;">顯示 TTS 除錯訊息</button>
+                    <button id="btn-clear-cache" class="btn-primary" style="width:100%; margin-top: 0.5rem; background-color: #d9534f;">清除所有離線快取 (Clear Cache)</button>
                 </div>
                 
                 <div id="qr-container" class="hidden" style="margin-top: 1rem; text-align: center; background: white; padding: 1rem; border-radius: 8px;">
@@ -290,8 +281,11 @@
     <script src="js/i18n.js"></script>
     <script src="js/engine.js"></script>
     <script src="js/tts/chunks.js"></script>
-    <script src="js/tts/piper.js"></script>
     <script src="js/tts/webspeech.js"></script>
+    <!-- Dependencies for Matcha TTS (Option C: ORT + pinyin-pro) -->
+    <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.24.2/dist/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
+    <script src="js/tts/matcha.js"></script>
     <script src="js/tts.js"></script>
     <script src="js/reading-log.js"></script>
     <script src="js/reading-panel.js"></script>
