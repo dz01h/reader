@@ -1,11 +1,10 @@
-const CACHE_NAME = 'zen-reader-v35';
+const CACHE_NAME = 'zen-reader-v36';
 const urlsToCache = [
   './',
   './index.html',
   './css/style.css',
   './manifest.json',
   './icon.svg',
-  './s.wav',
   './js/db.js',
   './js/i18n.js',
   './js/engine.js',
