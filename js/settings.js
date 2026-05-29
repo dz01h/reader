@@ -105,63 +105,21 @@ class ZenSettings {
 
         this.ttsModelSelect.innerHTML = '';
 
-        // 1. Piper Group
-        const piperGroup = document.createElement('optgroup');
-        piperGroup.label = 'Piper (離線高音質 AI)';
-        const piperVoices = [
-            { value: 'piper:zh_CN-huayan-medium', name: '胡燕 (溫柔女聲)' },
-            { value: 'piper:zh_CN-huayan-x_low', name: '胡燕 (低資源女聲)' }
-        ];
-        piperVoices.forEach(v => {
-            const opt = document.createElement('option');
-            opt.value = v.value;
-            opt.textContent = v.name;
-            piperGroup.appendChild(opt);
-        });
-        this.ttsModelSelect.appendChild(piperGroup);
 
-        // 2. Kokoro Group (v1.0 英文模型)
-        const kokoroGroup = document.createElement('optgroup');
-        kokoroGroup.label = 'Kokoro (離線超高音質 AI，英文專用)';
-        const kokoroVoices = [
-            { value: 'kokoro:af_heart', name: 'Heart (溫柔女聲 🇺🇸)' },
-            { value: 'kokoro:af_bella', name: 'Bella (清亮女聲 🇺🇸)' },
-            { value: 'kokoro:af_sarah', name: 'Sarah (活潑女聲 🇺🇸)' },
-            { value: 'kokoro:af_sky', name: 'Sky (輕柔女聲 🇺🇸)' },
-            { value: 'kokoro:am_adam', name: 'Adam (磁性男聲 🇺🇸)' },
-            { value: 'kokoro:am_michael', name: 'Michael (穩重男聲 🇺🇸)' },
-            { value: 'kokoro:bf_emma', name: 'Emma (溫柔女聲 🇬🇧)' },
-            { value: 'kokoro:bf_isabella', name: 'Isabella (優雅女聲 🇬🇧)' },
-            { value: 'kokoro:bm_george', name: 'George (磁性男聲 🇬🇧)' },
-            { value: 'kokoro:bm_lewis', name: 'Lewis (穩重男聲 🇬🇧)' }
+        // 4. Matcha Group (獨立的高速 TTS 引擎)
+        const matchaGroup = document.createElement('optgroup');
+        matchaGroup.label = 'Matcha TTS (獨立引擎)';
+        const matchaVoices = [
+            { value: 'matcha:matcha-icefall-zh-baker:0', name: 'Matcha Baker (高速純中文)' },
+            { value: 'matcha:matcha-icefall-zh-en:0', name: 'Matcha 中英雙語 (高速)' }
         ];
-        kokoroVoices.forEach(v => {
+        matchaVoices.forEach(v => {
             const opt = document.createElement('option');
             opt.value = v.value;
             opt.textContent = v.name;
-            kokoroGroup.appendChild(opt);
+            matchaGroup.appendChild(opt);
         });
-        this.ttsModelSelect.appendChild(kokoroGroup);
-
-        // 3. Sherpa-ONNX Group (中文 VITS 引擎)
-        const sherpaGroup = document.createElement('optgroup');
-        sherpaGroup.label = 'Sherpa-ONNX (本地離線 AI，初次載入需下載)';
-        const sherpaVoices = [
-            { value: 'sherpa:matcha-icefall-zh-baker:0', name: 'Matcha Baker (高速純中文)' },
-            { value: 'sherpa:matcha-icefall-zh-en:0', name: 'Matcha 中英雙語 (高速)' },
-            { value: 'sherpa:kokoro-multi-lang-v1_1:0', name: 'Kokoro 中英文 (高音質)' },
-            { value: 'sherpa:vits-melo-tts-zh_en:0', name: 'MeloTTS 中英雙語' },
-            { value: 'sherpa:vits-zh-hf-fanchen-c:0', name: 'VITS FanChen-C (純中文女聲)' },
-            { value: 'sherpa:vits-zh-hf-eula:0',   name: 'EULA 語音包 (女聲)' },
-            { value: 'sherpa:vits-zh-ll:0', name: 'LL 語音包 (女聲)' },
-        ];
-        sherpaVoices.forEach(v => {
-            const opt = document.createElement('option');
-            opt.value = v.value;
-            opt.textContent = v.name;
-            sherpaGroup.appendChild(opt);
-        });
-        this.ttsModelSelect.appendChild(sherpaGroup);
+        this.ttsModelSelect.appendChild(matchaGroup);
         const webSpeechGroup = document.createElement('optgroup');
         webSpeechGroup.label = 'Web Speech API (系統原生/極度省電)';
 

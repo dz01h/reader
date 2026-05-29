@@ -281,10 +281,11 @@
     <script src="js/i18n.js"></script>
     <script src="js/engine.js"></script>
     <script src="js/tts/chunks.js"></script>
-    <script src="js/tts/piper.js"></script>
     <script src="js/tts/webspeech.js"></script>
-    <script src="js/tts/kokoro.js"></script>
-    <script src="js/tts/sherpa.js"></script>
+    <!-- Dependencies for Matcha TTS (Option C: ORT + pinyin-pro) -->
+    <script src="https://cdn.jsdelivr.net/npm/pinyin-pro@3.24.2/dist/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
+    <script src="js/tts/matcha.js"></script>
     <script src="js/tts.js"></script>
     <script src="js/reading-log.js"></script>
     <script src="js/reading-panel.js"></script>
@@ -298,15 +299,6 @@
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js').then(reg => {
                     console.log('ServiceWorker registered');
-                    // 如果尚未跨來源隔離，且 SW 已經接管，自動重新載入頁面以取得安全標頭
-                    if (!window.crossOriginIsolated) {
-                        let reload = () => { window.location.reload(); };
-                        if (navigator.serviceWorker.controller) {
-                            reload();
-                        } else {
-                            navigator.serviceWorker.addEventListener('controllerchange', reload);
-                        }
-                    }
                 }).catch(err => {
                     console.log('ServiceWorker registration failed', err);
                 });

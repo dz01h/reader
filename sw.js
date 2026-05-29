@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-reader-v17';
+const CACHE_NAME = 'zen-reader-v27';
 const urlsToCache = [
   './',
   './index.html',
@@ -15,17 +15,14 @@ const urlsToCache = [
   './js/app.js',
   './js/tts.js',
   './js/tts/chunks.js',
-  './js/tts/piper.js',
-  './js/tts/piper-worker.js',
   './js/tts/webspeech.js',
-  './js/tts/kokoro.js',
-  './js/tts/kokoro-worker.js',
-  './js/tts/sherpa.js',
-  './js/tts/sherpa-worker.js',
-  './lib/sherpa-onnx/sherpa-onnx-tts.js',
-  './lib/sherpa-onnx/sherpa-onnx-wasm-main-tts.js',
-  './lib/sherpa-onnx/sherpa-onnx-wasm-main-tts.wasm',
-  './lib/sherpa-onnx/sherpa-onnx-wasm-main-tts.data'
+  './js/tts/matcha.js',
+  './js/tts/matcha-worker.js',
+  'https://cdn.jsdelivr.net/npm/pinyin-pro@3.24.2/dist/index.js',
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js',
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort-wasm-simd-threaded.wasm',
+  'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort-wasm-simd.wasm',
+
 ];
 
 self.addEventListener('install', event => {
@@ -45,18 +42,6 @@ self.addEventListener('activate', event => {
   );
   self.clients.claim();
 });
-
-function injectCOOP(res) {
-  if (res.type === 'opaque') return res;
-  const newHeaders = new Headers(res.headers);
-  newHeaders.set('Cross-Origin-Opener-Policy', 'same-origin');
-  newHeaders.set('Cross-Origin-Embedder-Policy', 'require-corp');
-  return new Response(res.body, {
-    status: res.status,
-    statusText: res.statusText,
-    headers: newHeaders
-  });
-}
 
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
@@ -78,7 +63,7 @@ self.addEventListener('fetch', event => {
         const cachedResponse = await cache.match(event.request);
 
         if ((isCDNHost || isGitHubReleases || isHuggingFace || isModelScope || isLib) && cachedResponse) {
-          return injectCOOP(cachedResponse);
+          return cachedResponse;
         }
 
         if (isSameOrigin && cachedResponse) {
@@ -87,14 +72,14 @@ self.addEventListener('fetch', event => {
               cache.put(event.request, networkResponse.clone());
             }
           }).catch(() => {});
-          return injectCOOP(cachedResponse);
+          return cachedResponse;
         }
 
         const networkResponse = await fetch(event.request);
         if (networkResponse && (networkResponse.status === 200 || networkResponse.status === 0)) {
           cache.put(event.request, networkResponse.clone());
         }
-        return injectCOOP(networkResponse);
+        return networkResponse;
       } catch (e) {
         return new Response('Network error', { status: 503 });
       }

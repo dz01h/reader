@@ -50,12 +50,8 @@ class ZenTTS {
 
         if (engineType === 'webspeech' && window.ZenTTSWebSpeech) {
             this.ttsEngine = new window.ZenTTSWebSpeech(this.app);
-        } else if (engineType === 'kokoro' && window.ZenTTSKokoro) {
-            this.ttsEngine = new window.ZenTTSKokoro(this.app);
-        } else if (engineType === 'sherpa' && window.ZenTTSSherpa) {
-            this.ttsEngine = new window.ZenTTSSherpa(this.app);
-        } else if (window.ZenTTSPiper) {
-            this.ttsEngine = new window.ZenTTSPiper(this.app);
+        } else if (engineType === 'matcha' && window.ZenTTSMatcha) {
+            this.ttsEngine = new window.ZenTTSMatcha(this.app);
         }
 
         // If we switched engines while playing, we need to restart the current page
