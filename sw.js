@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-reader-v27';
+const CACHE_NAME = 'zen-reader-v35';
 const urlsToCache = [
   './',
   './index.html',
@@ -18,6 +18,7 @@ const urlsToCache = [
   './js/tts/webspeech.js',
   './js/tts/matcha.js',
   './js/tts/matcha-worker.js',
+  './js/tts/custom-dict.js',
   'https://cdn.jsdelivr.net/npm/pinyin-pro@3.24.2/dist/index.js',
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js',
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort-wasm-simd-threaded.wasm',
@@ -41,6 +42,29 @@ self.addEventListener('activate', event => {
     ))
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', async event => {
+  if (event.data && event.data.type === 'UPDATE_TTS_DICT' && event.data.payload) {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      const req = new Request('./js/tts/custom-dict.js');
+      const cachedResponse = await cache.match(req);
+      if (cachedResponse) {
+        let text = await cachedResponse.text();
+        const injected = `\nObject.assign(self.ZenTTSCustomDict, ${JSON.stringify(event.data.payload)});`;
+        if (!text.includes(injected)) {
+            text += injected;
+            const newRes = new Response(text, {
+                headers: cachedResponse.headers
+            });
+            await cache.put(req, newRes);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to update cache with TTS dict', e);
+    }
+  }
 });
 
 self.addEventListener('fetch', event => {
@@ -70,6 +94,11 @@ self.addEventListener('fetch', event => {
           fetch(event.request).then(networkResponse => {
             if (networkResponse && networkResponse.status === 200) {
               cache.put(event.request, networkResponse.clone());
+              if (url.pathname.endsWith('/js/tts/custom-dict.js')) {
+                self.clients.matchAll().then(clients => {
+                  clients.forEach(client => client.postMessage({ type: 'REQUEST_TTS_SYNC' }));
+                });
+              }
             }
           }).catch(() => {});
           return cachedResponse;
@@ -78,6 +107,11 @@ self.addEventListener('fetch', event => {
         const networkResponse = await fetch(event.request);
         if (networkResponse && (networkResponse.status === 200 || networkResponse.status === 0)) {
           cache.put(event.request, networkResponse.clone());
+          if (url.pathname.endsWith('/js/tts/custom-dict.js')) {
+            self.clients.matchAll().then(clients => {
+              clients.forEach(client => client.postMessage({ type: 'REQUEST_TTS_SYNC' }));
+            });
+          }
         }
         return networkResponse;
       } catch (e) {

@@ -1,6 +1,15 @@
 importScripts('https://cdn.jsdelivr.net/npm/pinyin-pro@3.24.2/dist/index.js');
 importScripts('https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js');
 
+try {
+    importScripts('./custom-dict.js');
+    if (self.ZenTTSCustomDict) {
+        pinyinPro.customPinyin(self.ZenTTSCustomDict);
+    }
+} catch (e) {
+    console.warn('[MatchaWorker] Failed to load custom dictionary:', e);
+}
+
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/';
 // Disable multi-threading in ORT to ensure it doesn't need SharedArrayBuffer
 ort.env.wasm.numThreads = 1;
@@ -186,7 +195,15 @@ async function initModels(modelConfig) {
 }
 
 function textToTokens(text) {
-    const pinyinArray = pinyinPro.pinyin(text, { toneType: 'num', type: 'array', nonZh: 'consecutive' })
+    // Normalize punctuation to English counterparts as expected by the model
+    const normalizedText = text
+        .replace(/[，、；：:]/g, ',')
+        .replace(/。/g, '.')
+        .replace(/？/g, '?')
+        .replace(/！/g, '!')
+        .replace(/\s+/g, ' ');
+
+    const pinyinArray = pinyinPro.pinyin(normalizedText, { toneType: 'num', type: 'array', nonZh: 'consecutive' })
         .map(py => py.replace(/0$/, '5')); // map light tone 0 to 5
     const ids = []; // No padding required for this specific model architecture in JS
 

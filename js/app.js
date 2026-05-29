@@ -520,6 +520,29 @@ class ZenReaderApp {
             this.updateSyncStatus(e.detail.status, e.detail.message);
         });
 
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', async (event) => {
+                if (event.data && event.data.type === 'REQUEST_TTS_SYNC') {
+                    if (this.readingLog && this.gdrive) {
+                        const token = await this.gdrive.getAccessToken();
+                        if (token) {
+                            const dict = await this.readingLog.getCustomTTSDict();
+                            if (Object.keys(dict).length > 0) {
+                                if (!window.ZenTTSCustomDict) window.ZenTTSCustomDict = {};
+                                Object.assign(window.ZenTTSCustomDict, dict);
+                                if (navigator.serviceWorker.controller) {
+                                    navigator.serviceWorker.controller.postMessage({
+                                        type: 'UPDATE_TTS_DICT',
+                                        payload: dict
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
         document.body.addEventListener('ZenTTS:Status', (e) => {
             if (e.detail.status === 'loading') {
                 this.showToast(e.detail.message, 0);

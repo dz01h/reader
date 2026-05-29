@@ -55,6 +55,70 @@ class ZenReadingLog {
         }));
     }
 
+    async upgradeSheetSchema(token, sheetId) {
+        try {
+            const infoRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties(sheetId,title)`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (!infoRes.ok) return;
+            const info = await infoRes.json();
+            
+            const requests = [];
+            let hasProgress = info.sheets.some(s => s.properties.title === "progress");
+            let hasTtsDict = info.sheets.some(s => s.properties.title === "tts_dict");
+            
+            if (!hasProgress && info.sheets && info.sheets.length > 0) {
+                const firstSheet = info.sheets[0].properties;
+                requests.push({
+                    updateSheetProperties: {
+                        properties: { sheetId: firstSheet.sheetId, title: "progress" },
+                        fields: "title"
+                    }
+                });
+            }
+            
+            if (!hasTtsDict) {
+                const ttsSheetId = Math.floor(Math.random() * 1000000) + 1000;
+                requests.push({
+                    addSheet: {
+                        properties: { title: "tts_dict", sheetId: ttsSheetId }
+                    }
+                });
+                requests.push({
+                    updateCells: {
+                        range: { sheetId: ttsSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 3 },
+                        rows: [{
+                            values: [
+                                { userEnteredValue: { stringValue: "漢字" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                { userEnteredValue: { stringValue: "拼音" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                { userEnteredValue: { stringValue: "注音" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
+                            ]
+                        }],
+                        fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
+                    }
+                });
+            }
+
+            if (requests.length > 0) {
+                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ requests })
+                });
+                if (!res.ok) {
+                    console.error("Batch update failed:", await res.text());
+                } else {
+                    console.log("Upgraded existing Reading Log sheet schema.");
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to upgrade sheet schema", e);
+        }
+    }
+
     async getSheetId() {
         const token = await this.gdrive.getAccessToken();
         if (!token) return null;
@@ -67,7 +131,10 @@ class ZenReadingLog {
                 const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}?fields=spreadsheetId`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                if (res.ok) return this.sheetId;
+                if (res.ok) {
+                    await this.upgradeSheetSchema(token, this.sheetId);
+                    return this.sheetId;
+                }
                 this.sheetId = null;
                 localStorage.removeItem('zen_reader_sheet_id');
            } catch(e) {}
@@ -86,6 +153,7 @@ class ZenReadingLog {
                         this.sheetId = searchData.files[0].id;
                         localStorage.setItem('zen_reader_sheet_id', this.sheetId);
                         console.log("Found existing Reading Log sheet:", this.sheetId);
+                        await this.upgradeSheetSchema(token, this.sheetId);
                         return this.sheetId;
                     }
                 }
@@ -101,7 +169,11 @@ class ZenReadingLog {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        properties: { title: "Reading Log" }
+                        properties: { title: "Reading Log" },
+                        sheets: [
+                            { properties: { title: "progress", sheetId: 0 } },
+                            { properties: { title: "tts_dict", sheetId: 1 } }
+                        ]
                     })
                 });
                 const data = await res.json();
@@ -116,19 +188,34 @@ class ZenReadingLog {
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
-                            requests: [{
-                                updateCells: {
-                                    range: { sheetId: 0, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 3 },
-                                    rows: [{
-                                        values: [
-                                            { userEnteredValue: { stringValue: "filename" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
-                                            { userEnteredValue: { stringValue: "progress" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
-                                            { userEnteredValue: { stringValue: "updatedAt" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
-                                        ]
-                                    }],
-                                    fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
+                            requests: [
+                                {
+                                    updateCells: {
+                                        range: { sheetId: 0, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 3 },
+                                        rows: [{
+                                            values: [
+                                                { userEnteredValue: { stringValue: "filename" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                                { userEnteredValue: { stringValue: "progress" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                                { userEnteredValue: { stringValue: "updatedAt" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
+                                            ]
+                                        }],
+                                        fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
+                                    }
+                                },
+                                {
+                                    updateCells: {
+                                        range: { sheetId: 1, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 3 },
+                                        rows: [{
+                                            values: [
+                                                { userEnteredValue: { stringValue: "漢字" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                                { userEnteredValue: { stringValue: "拼音" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                                { userEnteredValue: { stringValue: "注音" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
+                                            ]
+                                        }],
+                                        fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
+                                    }
                                 }
-                            }]
+                            ]
                         })
                     });
                 }
@@ -178,9 +265,18 @@ class ZenReadingLog {
 
         let values = [];
         try {
-            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A2:C1001`, {
+            let res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C1001`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            
+            if (res.status === 400) {
+                console.log("Got 400 reading progress, attempting schema upgrade...");
+                await this.upgradeSheetSchema(token, sheetId);
+                res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C1001`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+            }
+            
             if (res.status === 404) {
                 this.sheetId = null;
                 localStorage.removeItem('zen_reader_sheet_id');
@@ -336,16 +432,32 @@ class ZenReadingLog {
         }
 
         try {
-            const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/A2:C2?valueInputOption=USER_ENTERED`, {
+            const payload = {
+                values: [[filename, progress, timestamp]]
+            };
+            
+            let res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2?valueInputOption=USER_ENTERED`, {
                 method: 'PUT',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({
-                    values: [[filename, progress, timestamp]]
-                })
+                body: JSON.stringify(payload)
             });
+            
+            if (res.status === 400) {
+                console.log("Got 400 updating progress, attempting schema upgrade...");
+                await this.upgradeSheetSchema(token, sheetId);
+                res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2?valueInputOption=USER_ENTERED`, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+            }
+            
             if (res.status === 404) {
                 this.sheetId = null;
                 localStorage.removeItem('zen_reader_sheet_id');
@@ -363,6 +475,49 @@ class ZenReadingLog {
             this.updateSyncStatus('error', err.message);
         } finally {
             this.syncing = false;
+        }
+    }
+
+    async getCustomTTSDict() {
+        const sheetId = await this.getSheetId();
+        if (!sheetId) return {};
+
+        const token = await this.gdrive.getAccessToken();
+        if (!token) return {};
+
+        try {
+            let res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/tts_dict!A2:C1000`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (res.status === 400) {
+                console.log("Got 400 fetching tts_dict, attempting schema upgrade...");
+                await this.upgradeSheetSchema(token, sheetId);
+                res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/tts_dict!A2:C1000`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+            }
+            
+            if (!res.ok) {
+                console.warn("Failed to fetch tts_dict");
+                return {};
+            }
+            
+            const data = await res.json();
+            const dict = {};
+            if (data.values) {
+                for (let row of data.values) {
+                    const hanzi = row[0];
+                    const pinyin = row[1];
+                    if (hanzi && pinyin) {
+                        dict[hanzi.trim()] = pinyin.trim();
+                    }
+                }
+            }
+            return dict;
+        } catch (e) {
+            console.error("Error fetching TTS dict:", e);
+            return {};
         }
     }
 }

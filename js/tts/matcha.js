@@ -116,8 +116,8 @@ class ZenTTSMatcha {
 
     _splitText(text) {
         if (!text) return [];
-        return text.split(/[\n，。、；：！？－—…]+/)
-            .map(s => s.replace(/\p{P}/gu, '').trim())
+        return text.split(/[\n]+/)
+            .map(s => s.trim())
             .filter(s => s.length > 0);
     }
 
@@ -326,7 +326,7 @@ class MatchaWorkerPool {
                 const key = pendingKeys.shift();
                 const item = this.engine.voicePool.get(key);
                 if (item) item.status = 'computing';
-                
+
                 w._busy = true;
                 const voiceId = this.engine.app.ttsVoice || 'matcha-icefall-zh-en:0';
                 const { modelKey, sid } = this.engine._parseVoiceId(voiceId);
