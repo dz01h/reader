@@ -7,7 +7,28 @@ class FileExplorer {
         
         this.listEl = document.getElementById('file-explorer-list');
         this.breadcrumbsEl = document.getElementById('file-explorer-breadcrumbs');
+        this.footerEl = document.getElementById('welcome-footer');
+        this.overflowContainer = document.getElementById('breadcrumb-overflow-container');
+        this.overflowBtn = document.getElementById('breadcrumb-overflow-btn');
+        this.dropdownEl = document.getElementById('breadcrumb-dropdown');
         this.scrollCache = {};
+        
+        if (this.overflowBtn) {
+            this.overflowBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.dropdownEl.classList.toggle('hidden');
+            });
+            document.addEventListener('click', (e) => {
+                if (!this.overflowContainer.contains(e.target)) {
+                    this.dropdownEl.classList.add('hidden');
+                }
+            });
+        }
+        
+        if (this.breadcrumbsEl) {
+            this.resizeObserver = new ResizeObserver(() => this.checkBreadcrumbOverflow());
+            this.resizeObserver.observe(this.breadcrumbsEl);
+        }
     }
 
     saveScrollState() {
@@ -16,12 +37,6 @@ class FileExplorer {
         this.scrollCache[currentFolderId] = scrollTop;
     }
 
-    /**
-     * @param {Array} path - Array of {id, name}
-     * @param {Array} items - [{id, name, type, mimeType, ...}]
-     * @param {Function} onSelect - item => void
-     * @param {Function} onNavigate - folderId => void
-     */
     show(path, items, onSelect, onNavigate) {
         this.path = path;
         this.onSelect = onSelect;
@@ -32,17 +47,29 @@ class FileExplorer {
     }
 
     renderBreadcrumbs() {
+        if (!this.footerEl || !this.breadcrumbsEl) return;
+        
+        if (this.path.length === 0) {
+            this.footerEl.classList.add('hidden');
+            return;
+        } else {
+            this.footerEl.classList.remove('hidden');
+        }
+
         this.breadcrumbsEl.innerHTML = '';
+        this.dropdownEl.innerHTML = '';
         
         // Root node
         const rootItem = document.createElement('span');
         rootItem.className = 'breadcrumb-item';
-        rootItem.textContent = this.app.i18n ? this.app.i18n.t('sourceGDrive') || 'GDrive' : 'GDrive';
+        const rootText = this.app.i18n ? this.app.i18n.t('sourceGDrive') || 'GDrive' : 'GDrive';
+        rootItem.textContent = rootText;
         rootItem.onclick = () => {
             this.saveScrollState();
             if (this.onNavigate) this.onNavigate('root');
         };
         this.breadcrumbsEl.appendChild(rootItem);
+        this.addDropdownItem(rootText, 'root');
 
         // Path nodes
         this.path.forEach((folder, index) => {
@@ -60,7 +87,44 @@ class FileExplorer {
                 if (this.onNavigate) this.onNavigate(folder.id, index + 1);
             };
             this.breadcrumbsEl.appendChild(pathItem);
+            this.addDropdownItem(folder.name, folder.id, index + 1);
         });
+
+        // Trigger overflow check manually once rendered
+        this.checkBreadcrumbOverflow();
+    }
+    
+    addDropdownItem(name, id, depth = -1) {
+        if (!this.dropdownEl) return;
+        const item = document.createElement('div');
+        item.className = 'breadcrumb-dropdown-item';
+        
+        // Add indentation for subfolders in dropdown
+        let indent = '';
+        if (depth >= 0) {
+            indent = '└─ '.padStart(depth * 3 + 3, '　');
+        }
+        item.textContent = indent + name;
+        item.title = name;
+        item.onclick = () => {
+            this.dropdownEl.classList.add('hidden');
+            this.saveScrollState();
+            if (this.onNavigate) {
+                if (id === 'root') this.onNavigate('root');
+                else this.onNavigate(id, depth);
+            }
+        };
+        this.dropdownEl.appendChild(item);
+    }
+    
+    checkBreadcrumbOverflow() {
+        if (!this.breadcrumbsEl || !this.overflowContainer) return;
+        if (this.breadcrumbsEl.scrollWidth > this.breadcrumbsEl.clientWidth + 5) {
+            this.overflowContainer.classList.remove('hidden');
+        } else {
+            this.overflowContainer.classList.add('hidden');
+            this.dropdownEl.classList.add('hidden');
+        }
     }
 
     renderList(items) {
@@ -137,7 +201,9 @@ class FileExplorer {
                 <div data-i18n="dropzoneHint">${this.app.i18n ? this.app.i18n.t('dropzoneHint') : '將檔案拖曳至此，或自左上角雲端載入'}</div>
             </li>
         `;
-        this.breadcrumbsEl.innerHTML = `<span class="breadcrumb-item">Local</span>`;
+        if (this.footerEl) {
+            this.footerEl.classList.add('hidden');
+        }
     }
 }
 

@@ -79,6 +79,7 @@ class ZenReaderApp {
         this.els = {
             dropZone: document.getElementById('welcome-screen'),
             fileInput: document.getElementById('file-input'),
+            btnRecentBooks: document.getElementById('btn-recent-books'),
             btnUpload: document.getElementById('btn-upload'),
             btnGDrive: document.getElementById('btn-gdrive'),
             readerContainer: document.getElementById('reader-container'),
@@ -90,9 +91,7 @@ class ZenReaderApp {
 
             statusBar: document.getElementById('status-bar'),
             progressSlider: document.getElementById('progress-slider'),
-            pageIndicator: document.getElementById('page-indicator'),
-
-            ttsSpeed: document.getElementById('tts-speed')
+            pageIndicator: document.getElementById('page-indicator')
         };
     }
 
@@ -121,7 +120,6 @@ class ZenReaderApp {
                 if (state.syncCooldown) this.syncCooldown = state.syncCooldown;
                 if (state.ttsSpeed) {
                     this.ttsSpeed = state.ttsSpeed;
-                    if (this.els.ttsSpeed) this.els.ttsSpeed.value = this.ttsSpeed;
                 }
                 if (state.ttsEngine) this.ttsEngine = state.ttsEngine;
                 if (state.ttsVoice) this.ttsVoice = state.ttsVoice;
@@ -160,6 +158,8 @@ class ZenReaderApp {
                 } else if (this.i18n) {
                     this.i18n.updateDOM();
                 }
+                
+                if (state.lastBookId) this.lastBookId = state.lastBookId;
             } catch (e) {
                 console.error("Local storage error:", e);
             }
@@ -168,10 +168,25 @@ class ZenReaderApp {
             document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
         }
 
-        const book = await window.ZenBook.loadCurrentBook(this.db);
+        let book = null;
+        if (this.lastBookId) {
+            book = await window.ZenBook.loadBook(this.db, this.lastBookId);
+        }
+        
+        // Fallback: If no lastBookId but there is a recent book, pick the most recent one
+        if (!book) {
+            const recentBooks = await window.ZenBook.getRecentBooks(this.db);
+            if (recentBooks && recentBooks.length > 0) {
+                this.lastBookId = recentBooks[0].id;
+                book = await window.ZenBook.loadBook(this.db, this.lastBookId);
+            }
+        }
+
         if (book) {
             this.loadBookIntoReader(book);
             this.showToast(`已載入上次閱讀的書籍`);
+        } else {
+            this.closeReader();
         }
 
         this.updateThemeColor();
@@ -231,6 +246,7 @@ class ZenReaderApp {
 
     loadBookIntoReader(book) {
         this.currentBook = book;
+        this.saveState({ lastBookId: book.id });
         this.els.documentTitle.textContent = book.filename;
 
         if (this.readingLog) {
@@ -245,6 +261,11 @@ class ZenReaderApp {
         this.els.dropZone.classList.add('hidden');
         this.els.readerContainer.classList.remove('hidden');
         this.els.headerCenter.classList.remove('hidden');
+        this.els.btnCloseReader.classList.remove('hidden');
+
+        if (!history.state || history.state.reading !== true) {
+            history.pushState({ reading: true }, '', '#reading');
+        }
 
         this.readingPanel.resize();
 
@@ -258,23 +279,108 @@ class ZenReaderApp {
         }
     }
 
-    async closeReader() {
+    async closeReader(isFromHistory = false) {
         if (this.tts) this.tts.stop();
         document.body.classList.remove('reading-mode');
         document.body.classList.remove('ui-hidden');
         this.updateThemeColor();
         this.els.readerContainer.classList.add('hidden');
         this.els.headerCenter.classList.add('hidden');
+        this.els.btnCloseReader.classList.add('hidden');
         this.els.dropZone.classList.remove('hidden');
         this.els.statusBar.classList.add('hidden');
+        
+        this.switchWelcomeView('recent');
+        
         this.els.documentTitle.textContent = '';
         if (this.currentBook) {
-            await this.currentBook.deleteFromDB(this.db);
             this.currentBook = null;
         }
         this.els.fileInput.value = '';
 
         this.readingPanel.reset();
+
+        if (!isFromHistory) {
+            if (history.state && history.state.reading === true) {
+                history.back();
+            }
+        }
+    }
+
+    switchWelcomeView(viewName) {
+        const recentBooksBtn = this.els.btnRecentBooks;
+        const uploadBtn = this.els.btnUpload;
+        const gdriveBtn = this.els.btnGDrive;
+        
+        const recentContainer = document.getElementById('recent-books-container');
+        const explorerList = document.getElementById('file-explorer-list');
+        const fileExplorer = this.fileExplorer; // assuming this exists or global
+
+        if (recentBooksBtn) recentBooksBtn.classList.remove('active');
+        if (uploadBtn) uploadBtn.classList.remove('active');
+        if (gdriveBtn) gdriveBtn.classList.remove('active');
+
+        if (viewName === 'recent') {
+            if (recentBooksBtn) recentBooksBtn.classList.add('active');
+            if (recentContainer) recentContainer.classList.remove('hidden');
+            if (explorerList) explorerList.classList.add('hidden');
+            if (window.fileExplorer && window.fileExplorer.footerEl) {
+                window.fileExplorer.footerEl.classList.add('hidden');
+            }
+            this.renderRecentBooks();
+        } else if (viewName === 'explorer') {
+            // Active state depends on if it's GDrive or Local, but for simplicity we can set active when used
+            if (recentContainer) recentContainer.classList.add('hidden');
+            if (explorerList) explorerList.classList.remove('hidden');
+            // Footer visibility is handled by file-explorer.js when rendering breadcrumbs
+            if (window.fileExplorer) window.fileExplorer.renderBreadcrumbs();
+        }
+    }
+
+    async renderRecentBooks() {
+        const container = document.getElementById('recent-books-container');
+        const grid = document.getElementById('recent-books-grid');
+        if (!container || !grid) return;
+
+        const recentBooks = await window.ZenBook.getRecentBooks(this.db);
+        if (!recentBooks || recentBooks.length === 0) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        container.classList.remove('hidden');
+        grid.innerHTML = '';
+        recentBooks.forEach(meta => {
+            const card = document.createElement('div');
+            card.className = 'recent-book-card';
+            
+            const date = new Date(meta.timestamp);
+            const dateString = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+            const progressPercent = Math.round((meta.progress || 0) * 100);
+
+            card.innerHTML = `
+                <div class="recent-book-title" title="${meta.filename}">${meta.filename}</div>
+                <div class="recent-book-meta">
+                    <span>${progressPercent}%</span>
+                    <span>${dateString}</span>
+                </div>
+                <div class="recent-book-progress-bar">
+                    <div class="recent-book-progress-fill" style="width: ${progressPercent}%"></div>
+                </div>
+            `;
+            
+            card.addEventListener('click', async () => {
+                const book = await window.ZenBook.loadBook(this.db, meta.id);
+                if (book) {
+                    this.loadBookIntoReader(book);
+                } else {
+                    this.showToast('無法載入書籍 (IDB_NOT_FOUND)');
+                    await this.db.deleteBook(meta.id);
+                    this.renderRecentBooks();
+                }
+            });
+            grid.appendChild(card);
+        });
     }
 
     updateSyncStatus(status, message = '') {
@@ -512,9 +618,32 @@ class ZenReaderApp {
     }
 
     bindEvents() {
-        this.els.btnCloseReader.addEventListener('click', () => this.closeReader());
-        this.els.btnUpload.addEventListener('click', () => this.els.fileInput.click());
-        if (this.els.btnGDrive && this.gdrive) this.els.btnGDrive.addEventListener('click', () => this.gdrive.handleAuthClick());
+        if (this.els.btnCloseReader) {
+            this.els.btnCloseReader.addEventListener('click', () => this.closeReader());
+        }
+        if (this.els.btnRecentBooks) {
+            this.els.btnRecentBooks.addEventListener('click', () => this.switchWelcomeView('recent'));
+        }
+        if (this.els.btnUpload) {
+            this.els.btnUpload.addEventListener('click', () => {
+                this.switchWelcomeView('explorer');
+                this.els.fileInput.click();
+            });
+        }
+        if (this.els.btnGDrive && this.gdrive) {
+            this.els.btnGDrive.addEventListener('click', () => {
+                this.switchWelcomeView('explorer');
+                this.gdrive.handleAuthClick();
+            });
+        }
+
+        window.addEventListener('popstate', (e) => {
+            if (document.body.classList.contains('reading-mode')) {
+                if (!e.state || e.state.reading !== true) {
+                    this.closeReader(true);
+                }
+            }
+        });
 
         document.body.addEventListener('UpdateSyncStatus', (e) => {
             this.updateSyncStatus(e.detail.status, e.detail.message);

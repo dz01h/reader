@@ -5,7 +5,7 @@ class ZenTTS {
         this.isPlaying = false;
         this.isPaused = false;
         this.isWaitingForNextPage = false;
-        
+
         this.chunks = null;
         this.ttsEngine = null;
         this._lastReadingText = null;
@@ -25,13 +25,8 @@ class ZenTTS {
     initDOM() {
         this.els = {
             btnToggle: document.getElementById('btn-tts-toggle'),
-            icon: document.getElementById('tts-icon'),
-            speed: document.getElementById('tts-speed')
+            icon: document.getElementById('tts-icon')
         };
-
-        if (this.els.speed && this.app.ttsSpeed) {
-            this.els.speed.value = this.app.ttsSpeed;
-        }
 
         // Silent audio player to keep OS awake and bind MediaSession
         this.audioPlayer = new Audio();
@@ -54,7 +49,7 @@ class ZenTTS {
 
     switchEngine(engineType) {
         const wasPlaying = this.isPlaying && !this.isPaused;
-        
+
         // Cancel any active loops immediately
         this._playSessionId++;
 
@@ -115,11 +110,7 @@ class ZenTTS {
 
     bindEvents() {
         if (this.els.btnToggle) this.els.btnToggle.addEventListener('click', () => this.toggle());
-        if (this.els.speed) {
-            this.els.speed.addEventListener('change', (e) => {
-                this.app.setTTSSpeed(parseFloat(e.target.value));
-            });
-        }
+
 
         document.body.addEventListener('ReadingOver', (e) => {
             const readingData = e.detail;
@@ -140,7 +131,7 @@ class ZenTTS {
                 this.isWaitingForNextPage = false;
                 this._lastReadingText = readingData.reading;
                 this.chunks = this.ttsEngine.prepare(readingData);
-                
+
                 if (this.isPlaying) {
                     this.playCurrentPage();
                 }
@@ -182,9 +173,9 @@ class ZenTTS {
         if (!this.isPlaying) return;
         this.isPlaying = false;
         this.isPaused = true;
-        
+
         if (this.els.icon) this.els.icon.textContent = '▶';
-        
+
         if (this.ttsEngine && this.ttsEngine.suspendAudio) {
             this.ttsEngine.suspendAudio();
         }
@@ -197,9 +188,9 @@ class ZenTTS {
         if (!this.isPaused) return;
         this.isPlaying = true;
         this.isPaused = false;
-        
-        if (this.els.icon) this.els.icon.textContent = '⏸';
-        
+
+        if (this.els.icon) this.els.icon.textContent = '❚❚';
+
         if (this.ttsEngine && this.ttsEngine.resumeAudio) {
             this.ttsEngine.resumeAudio();
         }
@@ -215,7 +206,7 @@ class ZenTTS {
         if (this.els.icon) this.els.icon.textContent = '▶';
 
         if (this.ttsEngine && this.ttsEngine.stopAudio) {
-            this.ttsEngine.stopAudio(false); 
+            this.ttsEngine.stopAudio(false);
         }
         this.audioPlayer.pause();
         this.releaseWakeLock(); // Release screen lock on stop
@@ -226,8 +217,8 @@ class ZenTTS {
         this.isPlaying = true;
         this.isPaused = false;
         this.isWaitingForNextPage = false;
-        if (this.els.icon) this.els.icon.textContent = '⏸';
-        
+        if (this.els.icon) this.els.icon.textContent = '❚❚';
+
         // **Critical for iOS/Android**: Must call play() synchronously within the user gesture (click event)
         // to acquire the MediaSession lock screen controls!
         this.audioPlayer.play().catch(e => console.warn(`audioPlayer.play() in start: ${e.message}`));

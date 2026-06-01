@@ -151,8 +151,8 @@ class GDriveModule {
 
     async handleAuthClick() {
         if (this.accessToken && this.expiresAt > Date.now()) {
-            this.currentPath = [];
-            this.fetchFolder('root');
+            const targetFolderId = this.currentPath.length > 0 ? this.currentPath[this.currentPath.length - 1].id : 'root';
+            this.fetchFolder(targetFolderId);
             return;
         }
 
@@ -165,8 +165,8 @@ class GDriveModule {
 
             if (data && data.access_token) {
                 this.accessToken = data.access_token;
-                this.currentPath = [];
-                this.fetchFolder('root');
+                const targetFolderId = this.currentPath.length > 0 ? this.currentPath[this.currentPath.length - 1].id : 'root';
+                this.fetchFolder(targetFolderId);
             } else {
                 throw new Error('Failed to get access token');
             }

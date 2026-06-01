@@ -90,12 +90,17 @@ class ReadingPanel {
             this.app.currentWritingMode,
             rect.width,
             rect.height,
-            this.app.currentFontFamily
+            this.app.currentFontFamily,
+            this.app.margins
         );
 
         // Notify app of scroll for UI updates (progress bar, TTS check)
         if (this.app.onScroll) {
             this.app.onScroll(this.scrollOffset, this.maxScroll);
+        }
+
+        if (document.body.classList.contains('settings-interacting')) {
+            this.drawMarginOverlays(rect, dpr);
         }
 
         // Fire ReadingOver event with visible text ONLY when stable (debounced)
@@ -106,6 +111,26 @@ class ReadingPanel {
                 this.readingOverTimeout = null;
             }, 200);
         }
+    }
+
+    drawMarginOverlays(rect, dpr) {
+        const ctx = this.ctx;
+        ctx.save();
+        // Reset transform first to avoid double-scaling if engine left it scaled
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+        ctx.fillStyle = 'rgba(255, 204, 0, 0.4)';
+        
+        const m = this.app.margins || { top: 0, bottom: 0, left: 0, right: 0 };
+        const w = rect.width;
+        const h = rect.height;
+
+        ctx.fillRect(0, 0, w, m.top);
+        ctx.fillRect(0, h - m.bottom, w, m.bottom);
+        ctx.fillRect(0, m.top, m.left, h - m.top - m.bottom);
+        ctx.fillRect(w - m.right, m.top, m.right, h - m.top - m.bottom);
+
+        ctx.restore();
     }
 
     dispatchReadingOver() {
@@ -123,10 +148,16 @@ class ReadingPanel {
         const fontSize = this.app.currentFontSize || 18;
         const lineHeightRatio = this.app.currentLineHeight || 1.8;
         const gridStep = fontSize * lineHeightRatio;
+        const padX = Math.max(4, fontSize * 0.1);
+        const padY = Math.max(4, fontSize * 0.1);
         const viewSize = this.app.currentWritingMode === 'vertical' 
-            ? (cw - margins.left - margins.right)
-            : (ch - margins.top - margins.bottom);
-        const maxLines = Math.max(1, Math.floor(viewSize / gridStep));
+            ? (cw - margins.left - margins.right - padX * 2)
+            : (ch - margins.top - margins.bottom - padY * 2);
+        
+        let maxLines = 1;
+        if (viewSize >= fontSize) {
+            maxLines = Math.floor((viewSize - fontSize) / gridStep) + 1;
+        }
         const jump = maxLines * gridStep;
         
         let next_vMin, next_vMax;
@@ -294,11 +325,16 @@ class ReadingPanel {
         const lineHeightRatio = this.app.currentLineHeight || 1.8;
         const gridStep = fontSize * lineHeightRatio;
 
+        const padX = Math.max(4, fontSize * 0.1);
+        const padY = Math.max(4, fontSize * 0.1);
         const viewSize = this.app.currentWritingMode === 'vertical' 
-            ? (rect.width - margins.left - margins.right)
-            : (rect.height - margins.top - margins.bottom);
+            ? (rect.width - margins.left - margins.right - padX * 2)
+            : (rect.height - margins.top - margins.bottom - padY * 2);
         
-        const maxLines = Math.max(1, Math.floor(viewSize / gridStep));
+        let maxLines = 1;
+        if (viewSize >= fontSize) {
+            maxLines = Math.floor((viewSize - fontSize) / gridStep) + 1;
+        }
         const jump = maxLines * gridStep;
 
         switch (action) {

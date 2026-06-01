@@ -9,8 +9,36 @@ class ZenEngine {
         const lineHeight = fontSize * lineHeightRatio;
         const charSpacing = Math.max(1, fontSize * 0.05);
 
-        let x = mode === 'vertical' ? cw - margins.right - fontSize : margins.left;
-        let y = margins.top;
+        const padX = Math.max(4, fontSize * 0.1);
+        const padY = Math.max(4, fontSize * 0.1);
+
+        let startX, startY;
+        if (mode === 'vertical') {
+            const availableWidth = cw - margins.left - margins.right - padX * 2;
+            let N = 1;
+            if (availableWidth >= fontSize) {
+                N = Math.floor((availableWidth - fontSize) / lineHeight) + 1;
+            }
+            const usedWidth = (N - 1) * lineHeight + fontSize;
+            const leftover = Math.max(0, availableWidth - usedWidth);
+            
+            startX = cw - margins.right - padX - leftover / 2 - fontSize;
+            startY = margins.top + padY;
+        } else {
+            const availableHeight = ch - margins.top - margins.bottom - padY * 2;
+            let N = 1;
+            if (availableHeight >= fontSize) {
+                N = Math.floor((availableHeight - fontSize) / lineHeight) + 1;
+            }
+            const usedHeight = (N - 1) * lineHeight + fontSize;
+            const leftover = Math.max(0, availableHeight - usedHeight);
+            
+            startX = margins.left + padX;
+            startY = margins.top + padY + leftover / 2;
+        }
+
+        let x = startX;
+        let y = startY;
         
         const drawOps = [];
         let justAutoWrapped = false;
@@ -26,20 +54,46 @@ class ZenEngine {
             const char = text[i];
             
             if (char === '\n') {
+                let newlineCount = 1;
+                let peek = i + 1;
+                while (peek < text.length) {
+                    const pc = text[peek];
+                    if (pc === '\n') {
+                        newlineCount++;
+                        peek++;
+                    } else if (pc === ' ' || pc === '　' || pc === '\t' || pc === '\r') {
+                        peek++;
+                    } else {
+                        break;
+                    }
+                }
+
                 if (!justAutoWrapped) {
                     const oldX = x;
                     const oldY = y;
                     if (mode === 'vertical') {
-                        x -= lineHeight; y = margins.top;
+                        x -= lineHeight; y = startY;
                     } else {
-                        y += lineHeight; x = margins.left;
+                        y += lineHeight; x = startX;
                     }
                     // Add newline as a control op so TTS knows where original breaks are
                     drawOps.push({ char: '\n', x: oldX, y: oldY, isControl: true, charIndex: i });
                 }
+                
+                // If consecutive newlines > 4, author is likely doing layout formatting.
+                // Otherwise, we collapse them into a single paragraph break.
+                if (newlineCount > 4) {
+                    for (let j = 0; j < newlineCount - 1; j++) {
+                        if (mode === 'vertical') {
+                            x -= lineHeight; y = startY;
+                        } else {
+                            y += lineHeight; x = startX;
+                        }
+                    }
+                }
+
                 justAutoWrapped = false;
-                i++; 
-                while (i < text.length && (text[i] === ' ' || text[i] === '　' || text[i] === '\t')) i++;
+                i = peek;
                 continue;
             }
             if (char === '\r') { i++; continue; }
@@ -65,18 +119,18 @@ class ZenEngine {
             if (mode === 'vertical') {
                 const verticalAdvance = isRotated && isAscii ? charW : fontSize;
                 // Add 1px buffer to prevent sub-pixel cutting at the bottom
-                if (y + verticalAdvance > ch - margins.bottom - 1) {
+                if (y + verticalAdvance > ch - margins.bottom - padY - 1) {
                     x -= lineHeight; 
-                    y = margins.top;
+                    y = margins.top + padY;
                     justAutoWrapped = true;
                 }
                 drawOps.push({ char, x, y, isRotated, charIndex: i });
                 y += verticalAdvance + charSpacing;
             } else {
                 // Add 1px buffer to prevent sub-pixel cutting at the right edge
-                if (x + charW > cw - margins.right - 1) {
+                if (x + charW > cw - margins.right - padX - 1) {
                     y += lineHeight; 
-                    x = margins.left;
+                    x = margins.left + padX;
                     justAutoWrapped = true;
                 }
                 drawOps.push({ char, x, y, isRotated, charIndex: i });
@@ -97,7 +151,7 @@ class ZenEngine {
         return { drawOps, maxScroll };
     }
 
-    drawOperations(drawOps, scrollOffset, fontSize, mode, cw, ch, fontFamily = 'sans-serif') {
+    drawOperations(drawOps, scrollOffset, fontSize, mode, cw, ch, fontFamily = 'sans-serif', margins = { top: 0, bottom: 0, left: 0, right: 0 }) {
         const dpr = Math.max(window.devicePixelRatio || 1, 2); // Match app.js strict retina policy
         
         // Reset transform to identity matrix to guarantee full clear Rect works
@@ -106,6 +160,11 @@ class ZenEngine {
         
         this.ctx.scale(dpr, dpr);
         this.ctx.save();
+        
+        // Clip to margin area so text doesn't spill over
+        this.ctx.beginPath();
+        this.ctx.rect(margins.left, margins.top, cw - margins.left - margins.right, ch - margins.top - margins.bottom);
+        this.ctx.clip();
         
         if (mode === 'vertical') {
             this.ctx.translate(scrollOffset, 0);

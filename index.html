@@ -22,13 +22,15 @@
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
-            <div class="logo" data-i18n="appTitle">Zen Reader</div>
-            
-            <div class="header-center hidden" id="header-center">
-                <span class="document-title-header" id="document-title"></span>
+            <div class="header-left" style="display: flex; align-items: center;">
+                <div class="logo" data-i18n="appTitle">Zen Reader</div>
                 <button id="btn-close-reader" class="btn-close-header" data-i18n="title:closeFile" title="關閉檔案">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                 </button>
+            </div>
+            
+            <div class="header-center" id="header-center">
+                <span class="document-title-header" id="document-title"></span>
             </div>
 
             <div class="controls">
@@ -41,39 +43,54 @@
         <!-- Main Content -->
         <main class="main-content" id="main-content">
             <!-- Welcome Screen & File Explorer -->
-            <div id="welcome-screen" class="welcome-screen">
+            <div id="welcome-screen" class="welcome-screen hidden">
                 <div class="welcome-header">
                     <div class="source-buttons">
+                        <button class="icon-btn active" id="btn-recent-books" data-i18n="title:btnRecentBooks" title="最近閱讀">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        </button>
+                        <span class="source-divider"></span>
                         <button class="icon-btn" id="btn-upload" data-i18n="title:btnSelectLocal" title="選擇本機檔案">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                         </button>
                         <button class="icon-btn" id="btn-gdrive" data-i18n="title:btnGDrive" title="由 Google Drive 載入">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22.06 15.81l-3.26-5.63A2 2 0 0 0 17.06 9H6.94a2 2 0 0 0-1.74 1.18L1.94 15.81A2 2 0 0 0 3.67 19h16.66a2 2 0 0 0 1.73-3.19z"></path><path d="M12 3L1.94 15.81"></path><path d="M6.94 9h15.12"></path></svg>
                         </button>
-                        <span class="source-divider"></span>
-                        <div id="file-explorer-breadcrumbs" class="file-explorer-breadcrumbs">
-                            <span class="breadcrumb-item">Local</span>
-                        </div>
                     </div>
                 </div>
                 
                 <div class="welcome-body" id="welcome-zone">
-                    <ul id="file-explorer-list" class="file-explorer-list inline-list">
+                    <ul id="file-explorer-list" class="file-explorer-list inline-list hidden">
                         <li class="empty-drop-hint file-explorer-empty">
                             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5; margin-bottom:1rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                             <div data-i18n="dropzoneHint">將檔案拖曳至此，或自左上角雲端載入</div>
                         </li>
                     </ul>
+                    
+                    <div id="recent-books-container" class="recent-books-container">
+                        <h3 class="recent-books-title" data-i18n="recentBooks">最近閱讀</h3>
+                        <div id="recent-books-grid" class="recent-books-grid"></div>
+                    </div>
+                </div>
+                <div class="welcome-footer hidden" id="welcome-footer">
+                    <div id="file-explorer-breadcrumbs" class="file-explorer-breadcrumbs">
+                    </div>
+                    <div class="breadcrumb-overflow-container hidden" id="breadcrumb-overflow-container">
+                        <button class="icon-btn" id="breadcrumb-overflow-btn">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+                        </button>
+                        <div class="breadcrumb-dropdown hidden" id="breadcrumb-dropdown"></div>
+                    </div>
                 </div>
                 <input type="file" id="file-input" accept=".txt,.zip" hidden>
             </div>
             
-            <div class="reader-container hidden" id="reader-container">
+            <div class="reader-container" id="reader-container">
                 <canvas id="reader-canvas" class="reader-canvas"></canvas>
             </div>
         </main>
 
-        <footer class="status-bar hidden" id="status-bar">
+        <footer class="status-bar" id="status-bar">
             <div class="status-main">
                 <div class="status-content">
                     <div class="status-top">
@@ -90,18 +107,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="info-right">
-                            <select id="tts-speed" title="Speed">
-                                <option value="0.5">0.5x</option>
-                                <option value="0.75">0.75x</option>
-                                <option value="1.0" selected>1.0x</option>
-                                <option value="1.25">1.25x</option>
-                                <option value="1.5">1.5x</option>
-                                <option value="2.0">2.0x</option>
-                                <option value="2.5">2.5x</option>
-                                <option value="3.0">3.0x</option>
-                            </select>
-                        </div>
+
                     </div>
                 </div>
                 <button id="btn-tts-toggle" class="btn-tts-giant">
@@ -115,8 +121,11 @@
     
     <dialog id="settings-dialog" class="settings-dialog">
         <div class="dialog-header">
+            <button id="btn-close-settings" class="btn-close">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
             <h2 data-i18n="settingsTitle">閱讀設定</h2>
-            <button id="btn-close-settings" class="btn-close">&times;</button>
+            <div style="width: 24px;"></div>
         </div>
         <div class="dialog-body">
             <div class="setting-group">
@@ -152,29 +161,29 @@
             </div>
             <div class="setting-group">
                 <label><span data-i18n="settingFontSize">字體大小: </span><span id="setting-font-size-display">18px</span></label>
-                <input type="range" id="setting-font-size" min="12" max="48" step="2" value="18">
+                <div class="custom-slider" id="setting-font-size" data-min="12" data-max="48" data-step="2"></div>
             </div>
             <div class="setting-group">
                 <label><span data-i18n="settingLineHeight">行距: </span><span id="setting-line-height-display">1.8</span></label>
-                <input type="range" id="setting-line-height" min="1.0" max="3.0" step="0.1" value="1.8">
+                <div class="custom-slider" id="setting-line-height" data-min="1.0" data-max="3.0" data-step="0.1"></div>
             </div>
             <fieldset class="setting-fieldset">
                 <legend data-i18n="settingMarginsGroup">邊距設定 (Pixels)</legend>
                 <div class="setting-group">
                     <label><span data-i18n="settingMarginTop">上: </span><span id="setting-margin-top-display">30</span></label>
-                    <input type="range" id="setting-margin-top" min="0" max="150" step="1" value="30">
+                    <div class="custom-slider" id="setting-margin-top" data-min="0" data-max="150" data-step="1"></div>
                 </div>
                 <div class="setting-group">
                     <label><span data-i18n="settingMarginBottom">下: </span><span id="setting-margin-bottom-display">30</span></label>
-                    <input type="range" id="setting-margin-bottom" min="0" max="150" step="1" value="30">
+                    <div class="custom-slider" id="setting-margin-bottom" data-min="0" data-max="150" data-step="1"></div>
                 </div>
                 <div class="setting-group">
                     <label><span data-i18n="settingMarginLeft">左: </span><span id="setting-margin-left-display">30</span></label>
-                    <input type="range" id="setting-margin-left" min="0" max="150" step="1" value="30">
+                    <div class="custom-slider" id="setting-margin-left" data-min="0" data-max="150" data-step="1"></div>
                 </div>
                 <div class="setting-group">
                     <label><span data-i18n="settingMarginRight">右: </span><span id="setting-margin-right-display">30</span></label>
-                    <input type="range" id="setting-margin-right" min="0" max="150" step="1" value="30">
+                    <div class="custom-slider" id="setting-margin-right" data-min="0" data-max="150" data-step="1"></div>
                 </div>
             </fieldset>
 
@@ -228,7 +237,7 @@
                 </div>
                 <div class="setting-group">
                     <label><span data-i18n="settingTTSSpeed">語音速度: </span><span id="setting-tts-speed-display">1.0</span></label>
-                    <input type="range" id="setting-tts-speed-slider" min="0.5" max="2.0" step="0.1" value="1.0">
+                    <div class="custom-slider" id="setting-tts-speed-slider" data-min="0.5" data-max="2.0" data-step="0.1"></div>
                 </div>
             </fieldset>
 
