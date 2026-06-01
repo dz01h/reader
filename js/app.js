@@ -158,7 +158,7 @@ class ZenReaderApp {
                 } else if (this.i18n) {
                     this.i18n.updateDOM();
                 }
-                
+
                 if (state.lastBookId) this.lastBookId = state.lastBookId;
             } catch (e) {
                 console.error("Local storage error:", e);
@@ -172,7 +172,7 @@ class ZenReaderApp {
         if (this.lastBookId) {
             book = await window.ZenBook.loadBook(this.db, this.lastBookId);
         }
-        
+
         // Fallback: If no lastBookId but there is a recent book, pick the most recent one
         if (!book) {
             const recentBooks = await window.ZenBook.getRecentBooks(this.db);
@@ -289,9 +289,9 @@ class ZenReaderApp {
         this.els.btnCloseReader.classList.add('hidden');
         this.els.dropZone.classList.remove('hidden');
         this.els.statusBar.classList.add('hidden');
-        
+
         this.switchWelcomeView('recent');
-        
+
         this.els.documentTitle.textContent = '';
         if (this.currentBook) {
             this.currentBook = null;
@@ -311,7 +311,7 @@ class ZenReaderApp {
         const recentBooksBtn = this.els.btnRecentBooks;
         const uploadBtn = this.els.btnUpload;
         const gdriveBtn = this.els.btnGDrive;
-        
+
         const recentContainer = document.getElementById('recent-books-container');
         const explorerList = document.getElementById('file-explorer-list');
         const fileExplorer = this.fileExplorer; // assuming this exists or global
@@ -353,7 +353,7 @@ class ZenReaderApp {
         recentBooks.forEach(meta => {
             const card = document.createElement('div');
             card.className = 'recent-book-card';
-            
+
             const date = new Date(meta.timestamp);
             const dateString = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
             const progressPercent = Math.round((meta.progress || 0) * 100);
@@ -364,11 +364,8 @@ class ZenReaderApp {
                     <span>${progressPercent}%</span>
                     <span>${dateString}</span>
                 </div>
-                <div class="recent-book-progress-bar">
-                    <div class="recent-book-progress-fill" style="width: ${progressPercent}%"></div>
-                </div>
             `;
-            
+
             card.addEventListener('click', async () => {
                 const book = await window.ZenBook.loadBook(this.db, meta.id);
                 if (book) {

@@ -893,14 +893,11 @@ body.reading-mode .logo {
     padding: 0.75rem 1rem;
     cursor: pointer;
     transition: all 0.2s ease;
-    display: grid;
-    grid-template-columns: 1fr auto;
-    grid-template-areas: 
-        "title meta"
-        "progress progress";
+    display: flex;
     row-gap: 0.5rem;
     column-gap: 1rem;
     align-items: center;
+    flex-wrap: wrap;
 }
 .recent-book-card:hover {
     transform: translateX(4px);
@@ -923,6 +920,7 @@ body.reading-mode .logo {
     display: flex;
     gap: 1rem;
     justify-content: flex-end;
+    flex: 1;
 }
 .recent-book-progress-bar {
     grid-area: progress;
