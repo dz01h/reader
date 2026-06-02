@@ -88,10 +88,15 @@ class ZenReaderApp {
 
             btnCloseReader: document.getElementById('btn-close-reader'),
             headerCenter: document.getElementById('header-center'),
+            currentChapterDisplay: document.getElementById('current-chapter-display'),
 
             statusBar: document.getElementById('status-bar'),
             progressSlider: document.getElementById('progress-slider'),
-            pageIndicator: document.getElementById('page-indicator')
+            sliderTooltip: document.getElementById('slider-tooltip'),
+            pageIndicator: document.getElementById('page-indicator'),
+            btnTocToggle: document.getElementById('btn-toc-toggle'),
+            tocDialog: document.getElementById('toc-dialog'),
+            tocList: document.getElementById('toc-list'),
         };
     }
 
@@ -229,7 +234,47 @@ class ZenReaderApp {
         );
 
         this.readingPanel.setLayout(drawOps, maxScroll, targetScroll);
+        this.calculateTOCPositions();
         this.els.statusBar.classList.remove('hidden');
+    }
+
+    calculateTOCPositions() {
+        if (!this.toc || this.toc.length === 0 || !this.readingPanel || !this.readingPanel.drawOps) return;
+        const ops = this.readingPanel.drawOps;
+        if (ops.length === 0) return;
+
+        const firstOp = ops[0];
+        const startX = firstOp ? firstOp.x : 0;
+        const startY = firstOp ? firstOp.y : 0;
+
+        for (let i = 0; i < this.toc.length; i++) {
+            const chapter = this.toc[i];
+            
+            let l = 0, r = ops.length - 1;
+            let ans = 0;
+            while (l <= r) {
+                const mid = (l + r) >> 1;
+                if (ops[mid].charIndex >= chapter.charIndex) {
+                    ans = mid;
+                    r = mid - 1;
+                } else {
+                    l = mid + 1;
+                }
+            }
+
+            const op = ops[ans];
+            if (op) {
+                let offset = 0;
+                if (this.currentWritingMode === 'vertical') {
+                    offset = startX - op.x;
+                } else {
+                    offset = op.y - startY;
+                }
+                
+                offset = Math.max(0, Math.min(offset, this.readingPanel.maxScroll));
+                chapter.percent = this.readingPanel.maxScroll > 0 ? offset / this.readingPanel.maxScroll : 0;
+            }
+        }
     }
 
     onScroll(scrollOffset, maxScroll) {
@@ -248,6 +293,10 @@ class ZenReaderApp {
         this.currentBook = book;
         this.saveState({ lastBookId: book.id });
         this.els.documentTitle.textContent = book.filename;
+        
+        if (book.content) {
+            this.parseTOC(book.content);
+        }
 
         if (this.readingLog) {
             this.readingLog.setReadingBook(book.filename);
@@ -276,6 +325,80 @@ class ZenReaderApp {
 
         if (this.gdrive) {
             this.checkAndSyncCloudProgress();
+        }
+    }
+
+    parseTOC(text) {
+        this.toc = [];
+        const tocRegex = /^\s*(第[零一二三四五六七八九十百千萬0-9０-９]+[章回節卷]|Chapter\s*[0-9]+|正文|楔子|前言|番外)/i;
+        const lines = text.split('\n');
+        let charIndex = 0;
+        
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.length < 50 && tocRegex.test(line)) {
+                this.toc.push({
+                    title: line.trim(),
+                    charIndex: charIndex,
+                    percent: charIndex / text.length
+                });
+            }
+            charIndex += line.length + 1; // +1 for newline
+        }
+        this.renderTOC();
+    }
+
+    renderTOC() {
+        if (!this.els.tocList) return;
+        this.els.tocList.innerHTML = '';
+        if (this.toc.length === 0) {
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'toc-item';
+            emptyEl.style.opacity = '0.5';
+            emptyEl.textContent = '無章節資訊';
+            this.els.tocList.appendChild(emptyEl);
+            return;
+        }
+        
+        this.toc.forEach(chapter => {
+            const el = document.createElement('div');
+            el.className = 'toc-item';
+            el.textContent = chapter.title;
+            el.addEventListener('click', () => {
+                this.els.tocDialog.classList.add('hidden');
+                this.readingPanel.setScrollOffset(this.readingPanel.maxScroll * chapter.percent);
+                this.saveProgress();
+                this.updateCurrentChapterDisplay();
+            });
+            this.els.tocList.appendChild(el);
+        });
+    }
+
+    updateCurrentChapterDisplay() {
+        if (!this.currentBook || !this.toc || this.toc.length === 0) {
+            if (this.els.currentChapterDisplay) this.els.currentChapterDisplay.textContent = '';
+            if (this.els.sliderTooltip) this.els.sliderTooltip.classList.add('hidden');
+            return;
+        }
+
+        const currentPercent = this.readingPanel.maxScroll > 0 ? this.readingPanel.scrollOffset / this.readingPanel.maxScroll : 0;
+        const bufferPixels = (this.currentFontSize || 18) * (this.currentLineHeight || 1.8) * 2;
+        const percentBuffer = this.readingPanel.maxScroll > 0 ? bufferPixels / this.readingPanel.maxScroll : 0;
+        
+        let currentChapter = this.toc[0].title;
+        for (let i = this.toc.length - 1; i >= 0; i--) {
+            if (currentPercent >= this.toc[i].percent - percentBuffer) {
+                currentChapter = this.toc[i].title;
+                break;
+            }
+        }
+        
+        if (this.els.currentChapterDisplay) {
+            this.els.currentChapterDisplay.textContent = currentChapter;
+        }
+        
+        if (this.els.sliderTooltip && !this.els.sliderTooltip.classList.contains('hidden')) {
+            this.els.sliderTooltip.textContent = currentChapter;
         }
     }
 
@@ -686,16 +809,58 @@ class ZenReaderApp {
             const percent = (e.detail.prog * 100).toFixed(3);
             this.els.pageIndicator.textContent = `${percent}%`;
             this.els.progressSlider.value = percent;
+            this.updateCurrentChapterDisplay();
         });
 
         this.els.fileInput.addEventListener('change', (e) => { if (e.target.files.length) this.handleFile(e.target.files[0]); });
-        this.els.progressSlider.addEventListener('input', (e) => { this.els.pageIndicator.textContent = `${parseFloat(e.target.value).toFixed(3)}%`; });
+        this.els.progressSlider.addEventListener('input', (e) => { 
+            this.els.pageIndicator.textContent = `${parseFloat(e.target.value).toFixed(3)}%`; 
+            
+            // Show tooltip
+            if (this.els.sliderTooltip && this.toc && this.toc.length > 0) {
+                this.els.sliderTooltip.classList.remove('hidden');
+                const val = e.target.value;
+                
+                // Find chapter for this percent
+                let currentChapter = this.toc[0].title;
+                const currentDecimal = val / 100;
+                const bufferPixels = (this.currentFontSize || 18) * (this.currentLineHeight || 1.8) * 2;
+                const percentBuffer = this.readingPanel.maxScroll > 0 ? bufferPixels / this.readingPanel.maxScroll : 0;
+                
+                for (let i = this.toc.length - 1; i >= 0; i--) {
+                    if (currentDecimal >= this.toc[i].percent - percentBuffer) {
+                        currentChapter = this.toc[i].title;
+                        break;
+                    }
+                }
+                this.els.sliderTooltip.textContent = currentChapter;
+            }
+        });
+        
+        // Hide tooltip when interaction ends
         this.els.progressSlider.addEventListener('change', (e) => {
+            if (this.els.sliderTooltip) {
+                this.els.sliderTooltip.classList.add('hidden');
+            }
             if (!this.currentBook) return;
             const target = this.readingPanel.maxScroll * (parseFloat(e.target.value) / 100);
             this.readingPanel.setScrollOffset(target);
             this.saveProgress();
+            this.updateCurrentChapterDisplay();
         });
+        
+        if (this.els.btnTocToggle && this.els.tocDialog) {
+            this.els.btnTocToggle.addEventListener('click', () => {
+                this.els.tocDialog.classList.toggle('hidden');
+            });
+            
+            // Close dialog when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!this.els.tocDialog.contains(e.target) && !this.els.btnTocToggle.contains(e.target)) {
+                    this.els.tocDialog.classList.add('hidden');
+                }
+            });
+        }
 
         // Drop zone events
         this.els.dropZone.addEventListener('dragover', (e) => { e.preventDefault(); this.els.dropZone.classList.add('dragover'); });
@@ -713,6 +878,7 @@ class ZenReaderApp {
             this.rebuildAndShow(0);
             const targetScroll = this.readingPanel.maxScroll * currentPercent;
             this.readingPanel.setScrollOffset(this.readingPanel.snapToGrid(targetScroll));
+            this.updateCurrentChapterDisplay();
         });
 
         document.addEventListener('visibilitychange', () => {

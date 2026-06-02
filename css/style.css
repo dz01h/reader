@@ -13,7 +13,8 @@
     --radius-md: 8px;
     --transition-fast: 0.2s ease;
 
-    --font-sans: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
+    --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang TC", "Hiragino Sans GB", "Microsoft JhengHei", sans-serif;
+    --font-serif: "Noto Serif CJK TC", "Songti TC", "PMingLiU", "MingLiU", serif;
     --reader-font-size: 18px;
     --reader-line-height: 1.8;
 }
@@ -446,6 +447,7 @@ select, input[type="text"] {
     justify-content: center;
     align-items: center;
     overflow: hidden;
+    min-height: 1cm;
 }
 
 .document-title-header {
@@ -535,7 +537,7 @@ select, input[type="text"] {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    padding: 0 1rem;
+    padding: 1rem 1rem 0;
     position: relative;
 }
 
@@ -754,6 +756,7 @@ body.reading-mode .logo {
     border-bottom: 1px solid var(--color-border);
     cursor: pointer;
     transition: background-color var(--transition-fast);
+    min-height: 1cm;
 }
 
 .file-item:hover {
@@ -995,4 +998,114 @@ body.reading-mode .logo {
 .breadcrumb-separator {
     margin: 0 0.25rem;
     opacity: 0.5;
+}
+/* --- TOC & Chapter UI --- */
+.current-chapter-display {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    opacity: 0.8;
+    pointer-events: none;
+    z-index: 10;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.status-top {
+    position: relative;
+}
+
+.slider-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+    color: var(--color-text);
+    white-space: nowrap;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-sm);
+    pointer-events: none;
+    z-index: 20;
+    transition: opacity 0.2s ease;
+}
+
+.slider-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border-width: 5px;
+    border-style: solid;
+    border-color: var(--color-surface) transparent transparent transparent;
+}
+
+.slider-tooltip.hidden {
+    opacity: 0;
+    visibility: hidden;
+}
+
+.toc-dialog {
+    position: absolute;
+    bottom: 75px;
+    left: 1rem;
+    width: 300px;
+    max-height: 50vh;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    z-index: 100;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    transform-origin: bottom left;
+}
+
+.toc-dialog.hidden {
+    opacity: 0;
+    transform: scale(0.95);
+    pointer-events: none;
+}
+
+.toc-header {
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    border-bottom: 1px solid var(--color-border);
+    background: var(--color-surface);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.toc-list {
+    overflow-y: auto;
+    padding: 0.5rem 0;
+}
+
+.toc-item {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.toc-item:hover {
+    background: var(--color-surface);
+}
+
+.info-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
 }
