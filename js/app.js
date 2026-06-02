@@ -671,6 +671,11 @@ class ZenReaderApp {
         this.saveState({ fontSize: size });
         this.applyLayoutChange();
     }
+    setFontFamily(family) {
+        this.currentFontFamily = family;
+        this.saveState({ fontFamily: family });
+        this.applyLayoutChange();
+    }
     setLineHeight(ratio) {
         this.currentLineHeight = ratio;
         this.saveState({ lineHeight: ratio });

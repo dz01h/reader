@@ -335,7 +335,10 @@ class ReadingPanel {
         if (viewSize >= fontSize) {
             maxLines = Math.floor((viewSize - fontSize) / gridStep) + 1;
         }
-        const jump = maxLines * gridStep;
+        
+        // 保留 1 行作為閱讀銜接
+        const linesToJump = maxLines > 1 ? maxLines - 1 : 1;
+        const jump = linesToJump * gridStep;
 
         switch (action) {
             case 'prev':

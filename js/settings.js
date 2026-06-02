@@ -121,6 +121,21 @@ class ZenSettings {
         this.themeSelect = document.getElementById('setting-theme');
         this.directionSelect = document.getElementById('setting-direction');
         this.fontFamilySelect = document.getElementById('setting-font-family');
+        this.btnLoadLocalFonts = document.getElementById('btn-load-local-fonts');
+        
+        if (this.btnLoadLocalFonts && 'queryLocalFonts' in window) {
+            this.btnLoadLocalFonts.style.display = 'block';
+            this.btnLoadLocalFonts.addEventListener('click', () => this.loadLocalFonts());
+            
+            // Auto-load if permission is already granted
+            if (navigator.permissions && navigator.permissions.query) {
+                navigator.permissions.query({ name: 'local-fonts' }).then(result => {
+                    if (result.state === 'granted') {
+                        this.loadLocalFonts(true);
+                    }
+                }).catch(err => console.log('local-fonts permission query failed:', err));
+            }
+        }
         
         this.fontSizeDisplay = document.getElementById('setting-font-size-display');
         this.fontSizeSlider = new CustomSlider(document.getElementById('setting-font-size'), throttleLayout((val) => {
@@ -492,6 +507,47 @@ class ZenSettings {
             }
         } catch (err) {
             console.warn('[Cache Cleanup] Failed to clear old engine cache:', err);
+        }
+    }
+
+    async loadLocalFonts(silent = false) {
+        try {
+            const availableFonts = await window.queryLocalFonts();
+            const fontSet = new Set();
+            const fonts = [];
+            
+            for (const fontData of availableFonts) {
+                if (!fontSet.has(fontData.family)) {
+                    fontSet.add(fontData.family);
+                    fonts.push(fontData.family);
+                }
+            }
+            
+            fonts.sort();
+            
+            while (this.fontFamilySelect.options.length > 3) {
+                this.fontFamilySelect.remove(3);
+            }
+            
+            for (const family of fonts) {
+                const opt = document.createElement('option');
+                opt.value = `"${family}", sans-serif`;
+                opt.textContent = family;
+                this.fontFamilySelect.appendChild(opt);
+            }
+            
+            this.fontFamilySelect.value = this.app.currentFontFamily;
+            if (this.btnLoadLocalFonts) {
+                this.btnLoadLocalFonts.style.display = 'none';
+            }
+            
+            if (!silent) this.app.showToast('本機字型載入成功！');
+            
+        } catch (err) {
+            console.error(err);
+            if (!silent) {
+                this.app.showToast('無法存取本機字型，請確認權限是否允許。');
+            }
         }
     }
 }
