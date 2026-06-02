@@ -726,6 +726,10 @@ select, input[type="text"] {
     .app-header:has(.header-center.hidden) .logo {
         display: block;
     }
+
+    .welcome-screen {
+        border-radius: 0;
+    }
 }
 
 /* Global hiding rules for reading mode */
