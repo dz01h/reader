@@ -180,7 +180,7 @@ class ZenSettings {
         this.langSelect = document.getElementById('setting-lang');
 
         this.btnSyncQr = document.getElementById('btn-sync-qr');
-        this.btnGasAuth = document.getElementById('btn-gas-auth');
+        this.btnGoogleLogin = document.getElementById('btn-google-login');
         this.syncCooldownSelect = document.getElementById('setting-sync-cooldown');
         this.qrContainer = document.getElementById('qr-container');
         this.qrCodeEl = document.getElementById('qr-code');
@@ -192,12 +192,12 @@ class ZenSettings {
             this.app.setTTSSpeed(val);
         });
 
-        this.btnShowDebug = document.getElementById('btn-show-debug');
+        this.btnShowErrorLog = document.getElementById('btn-show-error-log');
         this.btnClearCache = document.getElementById('btn-clear-cache');
-        this.debugDialog = document.getElementById('debug-log-dialog');
-        this.debugContent = document.getElementById('debug-log-content');
-        this.btnCloseDebug = document.getElementById('btn-close-debug-log');
-        this.btnClearDebug = document.getElementById('btn-clear-debug-log');
+        this.errorLogDialog = document.getElementById('error-log-dialog');
+        this.errorLogContent = document.getElementById('error-log-content');
+        this.btnCloseErrorLog = document.getElementById('btn-close-error-log');
+        this.btnClearErrorLog = document.getElementById('btn-clear-error-log');
     }
 
     syncUI() {
@@ -245,6 +245,10 @@ class ZenSettings {
         if (this.ttsSpeedSlider) {
             this.ttsSpeedSlider.setValue(this.app.ttsSpeed || 1.0);
             this.ttsSpeedDisplay.textContent = (this.app.ttsSpeed || 1.0).toFixed(1);
+        }
+        
+        if (this.app.updateGoogleUIState) {
+            this.app.updateGoogleUIState();
         }
     }
 
@@ -397,21 +401,27 @@ class ZenSettings {
             });
         }
 
-        if (this.btnGasAuth) {
-            this.btnGasAuth.addEventListener('click', () => {
-                window.open('https://myaccount.google.com/connections', '_blank');
-            });
-        }
-
         if (this.btnSyncQr) {
             this.btnSyncQr.addEventListener('click', (e) => this.generateSyncQR(e));
         }
 
-        if (this.btnShowDebug) {
-            this.btnShowDebug.addEventListener('click', () => {
-                const logs = JSON.parse(localStorage.getItem('zen_tts_debug_log') || '[]');
-                this.debugContent.textContent = logs.join('\n');
-                this.debugDialog.showModal();
+        if (this.btnGoogleLogin) {
+            this.btnGoogleLogin.addEventListener('click', () => {
+                if (this.app.gdrive) {
+                    this.app.gdrive.auth().then(() => {
+                        this.app.showToast('Google 帳號登入成功');
+                        this.syncUI(); // Update button states
+                        this.app.checkAndSyncCloudProgress();
+                    });
+                }
+            });
+        }
+
+        if (this.btnShowErrorLog) {
+            this.btnShowErrorLog.addEventListener('click', () => {
+                const logs = JSON.parse(localStorage.getItem('zen_app_error_log') || '[]');
+                this.errorLogContent.textContent = logs.join('\n');
+                this.errorLogDialog.showModal();
             });
         }
 
@@ -432,15 +442,15 @@ class ZenSettings {
             });
         }
 
-        if (this.btnCloseDebug) {
-            this.btnCloseDebug.addEventListener('click', () => this.debugDialog.close());
+        if (this.btnCloseErrorLog) {
+            this.btnCloseErrorLog.addEventListener('click', () => this.errorLogDialog.close());
         }
 
-        if (this.btnClearDebug) {
-            this.btnClearDebug.addEventListener('click', () => {
-                localStorage.removeItem('zen_tts_debug_log');
-                this.debugContent.textContent = '';
-                this.app.showToast('紀錄已清除');
+        if (this.btnClearErrorLog) {
+            this.btnClearErrorLog.addEventListener('click', () => {
+                localStorage.removeItem('zen_app_error_log');
+                this.errorLogContent.textContent = '';
+                this.app.showToast('已清除');
             });
         }
 

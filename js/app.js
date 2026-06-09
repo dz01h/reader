@@ -1,5 +1,17 @@
 class ZenReaderApp {
     constructor() {
+        // Global Error Logging
+        const logGlobalError = (msg) => {
+            try {
+                let logs = JSON.parse(localStorage.getItem('zen_app_error_log') || '[]');
+                logs.unshift(`[${new Date().toLocaleString()}] ${msg}`);
+                if (logs.length > 50) logs = logs.slice(0, 50);
+                localStorage.setItem('zen_app_error_log', JSON.stringify(logs));
+            } catch(e) {}
+        };
+        window.addEventListener('error', (e) => logGlobalError(`${e.message} at ${e.filename}:${e.lineno}`));
+        window.addEventListener('unhandledrejection', (e) => logGlobalError(`Unhandled Rejection: ${e.reason}`));
+
         // State
         this.currentFontSize = 18;
         this.currentWritingMode = 'horizontal';
@@ -189,12 +201,13 @@ class ZenReaderApp {
 
         if (book) {
             this.loadBookIntoReader(book);
-            this.showToast(`已載入上次閱讀的書籍`);
+            this.showToast(`已回復上次閱讀的書籍`);
         } else {
             this.closeReader();
         }
 
         this.updateThemeColor();
+        this.updateGoogleUIState();
     }
 
     saveState(updates) {
@@ -511,6 +524,8 @@ class ZenReaderApp {
         if (!el) return;
 
         el.classList.remove('hidden', 'syncing', 'success', 'error');
+        el.style.cursor = '';
+        el.onclick = null;
 
         if (status === 'syncing') {
             el.classList.add('syncing');
@@ -522,7 +537,18 @@ class ZenReaderApp {
         } else if (status === 'error') {
             el.classList.add('error');
             timeEl.textContent = new Date().toLocaleTimeString();
-            msgEl.textContent = message || (this.i18n ? this.i18n.t('syncError') : 'Sync failed');
+            
+            if (message === 'Auth failed') {
+                msgEl.textContent = '憑證過期，點此重新授權';
+                el.style.cursor = 'pointer';
+                el.onclick = () => {
+                    if (this.gdrive) {
+                        this.gdrive.auth().then(() => this.checkAndSyncCloudProgress());
+                    }
+                };
+            } else {
+                msgEl.textContent = message || (this.i18n ? this.i18n.t('syncError') : 'Sync failed');
+            }
         } else {
             el.classList.add('hidden');
         }
@@ -538,11 +564,33 @@ class ZenReaderApp {
         const metas = document.querySelectorAll('meta[name="theme-color"]');
         if (metas.length === 0) {
             const meta = document.createElement('meta');
-            meta.name = 'theme-color';
+            meta.name = "theme-color";
             meta.content = color;
             document.head.appendChild(meta);
         } else {
-            metas.forEach(m => m.setAttribute('content', color));
+            metas.forEach(m => m.content = color);
+        }
+    }
+
+    updateGoogleUIState() {
+        const hasAuth = !!localStorage.getItem('gdrive_auth');
+        const btnGDrive = document.getElementById('btn-gdrive');
+        if (btnGDrive) {
+            btnGDrive.style.opacity = hasAuth ? '1' : '0.5';
+            btnGDrive.style.pointerEvents = hasAuth ? 'auto' : 'none';
+        }
+        
+        if (this.settings) {
+            if (this.settings.btnSyncQr) {
+                this.settings.btnSyncQr.disabled = !hasAuth;
+                this.settings.btnSyncQr.style.opacity = hasAuth ? '1' : '0.5';
+            }
+            if (this.settings.syncCooldownSelect) {
+                this.settings.syncCooldownSelect.disabled = !hasAuth;
+            }
+            if (this.settings.btnGoogleLogin) {
+                this.settings.btnGoogleLogin.textContent = hasAuth ? '已登入 Google (點此重新授權)' : '登入 Google 帳號';
+            }
         }
     }
 
