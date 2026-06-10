@@ -408,7 +408,7 @@ class ZenSettings {
         if (this.btnGoogleLogin) {
             this.btnGoogleLogin.addEventListener('click', () => {
                 if (this.app.gdrive) {
-                    this.app.gdrive.auth().then(() => {
+                    this.app.gdrive.handleAuthClick().then(() => {
                         this.app.showToast('Google 帳號登入成功');
                         this.syncUI(); // Update button states
                         this.app.checkAndSyncCloudProgress();

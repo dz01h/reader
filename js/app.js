@@ -543,7 +543,7 @@ class ZenReaderApp {
                 el.style.cursor = 'pointer';
                 el.onclick = () => {
                     if (this.gdrive) {
-                        this.gdrive.auth().then(() => this.checkAndSyncCloudProgress());
+                        this.gdrive.handleAuthClick().then(() => this.checkAndSyncCloudProgress());
                     }
                 };
             } else {
