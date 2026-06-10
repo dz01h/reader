@@ -316,9 +316,9 @@ class GDriveModule {
                 }
             } else {
                 const text = this.app.decodeText(mergedArray);
+                await window.ZenOPFS.saveFile(fileName, text);
                 const book = new window.ZenBook(fileName, text);
                 book.loadProgress();
-                await book.saveToDB(this.app.db);
                 this.app.loadBookIntoReader(book);
             }
         } catch (err) {

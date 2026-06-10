@@ -187,15 +187,24 @@ class ZenReaderApp {
 
         let book = null;
         if (this.lastBookId) {
-            book = await window.ZenBook.loadBook(this.db, this.lastBookId);
+            const text = await window.ZenOPFS.loadFile(this.lastBookId);
+            if (text) {
+                book = new window.ZenBook(this.lastBookId, text);
+                book.loadProgress();
+            }
         }
 
         // Fallback: If no lastBookId but there is a recent book, pick the most recent one
         if (!book) {
-            const recentBooks = await window.ZenBook.getRecentBooks(this.db);
-            if (recentBooks && recentBooks.length > 0) {
-                this.lastBookId = recentBooks[0].id;
-                book = await window.ZenBook.loadBook(this.db, this.lastBookId);
+            const opfsFiles = await window.ZenOPFS.listFiles();
+            if (opfsFiles && opfsFiles.length > 0) {
+                const recentFile = opfsFiles[0].name;
+                const text = await window.ZenOPFS.loadFile(recentFile);
+                if (text) {
+                    this.lastBookId = recentFile;
+                    book = new window.ZenBook(recentFile, text);
+                    book.loadProgress();
+                }
             }
         }
 
@@ -304,7 +313,7 @@ class ZenReaderApp {
 
     loadBookIntoReader(book) {
         this.currentBook = book;
-        this.saveState({ lastBookId: book.id });
+        this.saveState({ lastBookId: book.filename });
         this.els.documentTitle.textContent = book.filename;
         
         if (book.content) {
@@ -478,38 +487,79 @@ class ZenReaderApp {
         const grid = document.getElementById('recent-books-grid');
         if (!container || !grid) return;
 
-        const recentBooks = await window.ZenBook.getRecentBooks(this.db);
-        if (!recentBooks || recentBooks.length === 0) {
+        const opfsFiles = await window.ZenOPFS.listFiles();
+        if (!opfsFiles || opfsFiles.length === 0) {
             container.classList.add('hidden');
             return;
         }
 
         container.classList.remove('hidden');
         grid.innerHTML = '';
-        recentBooks.forEach(meta => {
+        
+        // Load progress from localStorage
+        const savedState = localStorage.getItem('zen_reader_state');
+        const state = savedState ? JSON.parse(savedState) : {};
+        const positions = state.positions || {};
+
+        opfsFiles.forEach(meta => {
             const card = document.createElement('div');
             card.className = 'recent-book-card';
+            card.style.position = 'relative';
 
-            const date = new Date(meta.timestamp);
+            const date = new Date(meta.lastModified);
             const dateString = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-            const progressPercent = Math.round((meta.progress || 0) * 100);
+            
+            const bookProgressData = positions[meta.name];
+            const progressPercent = bookProgressData ? Math.round((bookProgressData.progress || 0) * 100) : 0;
 
             card.innerHTML = `
-                <div class="recent-book-title" title="${meta.filename}">${meta.filename}</div>
+                <div class="recent-book-title" title="${meta.name}">${meta.name}</div>
                 <div class="recent-book-meta">
                     <span>${progressPercent}%</span>
                     <span>${dateString}</span>
                 </div>
+                <div class="recent-book-actions" style="position: absolute; bottom: 8px; right: 8px; display: flex; gap: 4px;">
+                    <button class="btn-download" title="下載" style="background:none;border:none;cursor:pointer;padding:4px;color:#cbd5e1;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    </button>
+                    <button class="btn-delete" title="刪除" style="background:none;border:none;cursor:pointer;padding:4px;color:#f87171;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                    </button>
+                </div>
             `;
 
+            // Hover effects for actions
+            card.addEventListener('mouseenter', () => card.querySelector('.recent-book-actions').style.opacity = '1');
+            card.addEventListener('mouseleave', () => card.querySelector('.recent-book-actions').style.opacity = '0');
+            card.querySelector('.recent-book-actions').style.opacity = '0';
+            card.querySelector('.recent-book-actions').style.transition = 'opacity 0.2s';
+
+            // Delete action
+            const btnDelete = card.querySelector('.btn-delete');
+            btnDelete.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (confirm(`確定要刪除 ${meta.name} 嗎？`)) {
+                    await window.ZenOPFS.deleteFile(meta.name);
+                    this.renderRecentBooks();
+                }
+            });
+
+            // Download action
+            const btnDownload = card.querySelector('.btn-download');
+            btnDownload.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await window.ZenOPFS.downloadFile(meta.name);
+            });
+
+            // Open action
             card.addEventListener('click', async () => {
-                const book = await window.ZenBook.loadBook(this.db, meta.id);
-                if (book) {
+                const text = await window.ZenOPFS.loadFile(meta.name);
+                if (text) {
+                    const book = new window.ZenBook(meta.name, text);
+                    book.loadProgress();
                     this.loadBookIntoReader(book);
                 } else {
-                    this.showToast('無法載入書籍 (IDB_NOT_FOUND)');
-                    await this.db.deleteBook(meta.id);
-                    this.renderRecentBooks();
+                    this.showToast('無法讀取檔案');
                 }
             });
             grid.appendChild(card);
@@ -676,10 +726,10 @@ class ZenReaderApp {
         const reader = new FileReader();
         reader.onload = async (e) => {
             const text = await this.decodeText(new Uint8Array(e.target.result));
-        const book = new window.ZenBook(file.name, text);
-        book.loadProgress();
-        await book.saveToDB(this.db);
-        this.loadBookIntoReader(book);
+            await window.ZenOPFS.saveFile(file.name, text);
+            const book = new window.ZenBook(file.name, text);
+            book.loadProgress();
+            this.loadBookIntoReader(book);
         };
         reader.readAsArrayBuffer(file);
     }
