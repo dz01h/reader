@@ -181,6 +181,7 @@ class ZenSettings {
 
         this.btnSyncQr = document.getElementById('btn-sync-qr');
         this.btnGoogleLogin = document.getElementById('btn-google-login');
+        this.btnOpenReadingLog = document.getElementById('btn-open-reading-log');
         this.syncCooldownSelect = document.getElementById('setting-sync-cooldown');
         this.qrContainer = document.getElementById('qr-container');
         this.qrCodeEl = document.getElementById('qr-code');
@@ -413,6 +414,17 @@ class ZenSettings {
                         this.syncUI(); // Update button states
                         this.app.checkAndSyncCloudProgress();
                     });
+                }
+            });
+        }
+
+        if (this.btnOpenReadingLog) {
+            this.btnOpenReadingLog.addEventListener('click', () => {
+                const sheetId = localStorage.getItem('zen_reader_sheet_id');
+                if (sheetId) {
+                    window.open(`https://docs.google.com/spreadsheets/d/${sheetId}/edit`, '_blank');
+                } else {
+                    this.app.showToast('尚未建立或找到 Reading Log');
                 }
             });
         }

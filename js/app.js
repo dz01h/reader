@@ -1,16 +1,8 @@
 class ZenReaderApp {
     constructor() {
         // Global Error Logging
-        const logGlobalError = (msg) => {
-            try {
-                let logs = JSON.parse(localStorage.getItem('zen_app_error_log') || '[]');
-                logs.unshift(`[${new Date().toLocaleString()}] ${msg}`);
-                if (logs.length > 50) logs = logs.slice(0, 50);
-                localStorage.setItem('zen_app_error_log', JSON.stringify(logs));
-            } catch(e) {}
-        };
-        window.addEventListener('error', (e) => logGlobalError(`${e.message} at ${e.filename}:${e.lineno}`));
-        window.addEventListener('unhandledrejection', (e) => logGlobalError(`Unhandled Rejection: ${e.reason}`));
+        window.addEventListener('error', (e) => this.logError(`${e.message} at ${e.filename}:${e.lineno}`));
+        window.addEventListener('unhandledrejection', (e) => this.logError(`Unhandled Rejection: ${e.reason}`));
 
         // State
         this.currentFontSize = 18;
@@ -85,6 +77,15 @@ class ZenReaderApp {
 
         // Listen for remote progress signal from GAS
         document.body.addEventListener('readingLog', (e) => this.handleRemoteProgress(e.detail));
+    }
+
+    logError(msg) {
+        try {
+            let logs = JSON.parse(localStorage.getItem('zen_app_error_log') || '[]');
+            logs.unshift(`[${new Date().toLocaleString()}] ${msg}`);
+            if (logs.length > 50) logs = logs.slice(0, 50);
+            localStorage.setItem('zen_app_error_log', JSON.stringify(logs));
+        } catch(e) {}
     }
 
     initDOM() {
@@ -593,11 +594,13 @@ class ZenReaderApp {
                 el.style.cursor = 'pointer';
                 el.onclick = () => {
                     if (this.gdrive) {
-                        this.gdrive.handleAuthClick().then(() => this.checkAndSyncCloudProgress());
+                        this.gdrive.handleAuthClick(true).then(() => this.checkAndSyncCloudProgress());
                     }
                 };
+                this.logError(`Sync failed: Auth failed`);
             } else {
                 msgEl.textContent = message || (this.i18n ? this.i18n.t('syncError') : 'Sync failed');
+                this.logError(`Sync failed: ${message}`);
             }
         } else {
             el.classList.add('hidden');
@@ -641,6 +644,9 @@ class ZenReaderApp {
             if (this.settings.btnGoogleLogin) {
                 this.settings.btnGoogleLogin.textContent = hasAuth ? '已登入 Google (點此重新授權)' : '登入 Google 帳號';
             }
+            if (this.settings.btnOpenReadingLog) {
+                this.settings.btnOpenReadingLog.style.display = hasAuth ? 'block' : 'none';
+            }
         }
     }
 
@@ -653,6 +659,11 @@ class ZenReaderApp {
         if (duration > 0) {
             this.toastTimeout = setTimeout(() => toast.classList.remove('show'), duration);
         }
+    }
+
+    hideToast() {
+        const toast = document.getElementById('toast');
+        if (toast) toast.classList.remove('show');
     }
 
     // Cloud Sync
@@ -717,6 +728,31 @@ class ZenReaderApp {
         }
     }
 
+    async processExternalText(text) {
+        if (!this.gdrive || !this.readingLog) return text;
+        const token = await this.gdrive.getAccessToken();
+        if (!token) return text;
+
+        this.showToast('正在取得用詞替換表...', 0);
+        try {
+            const dict = await this.readingLog.getReplacementDict();
+            if (dict && dict.length > 0) {
+                this.showToast('正在套用用詞替換...', 0);
+                for (let i = 0; i < dict.length; i++) {
+                    const { target, replacement } = dict[i];
+                    if (target && replacement) {
+                        text = text.split(target).join(replacement);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to apply replacement dict', e);
+        } finally {
+            this.hideToast();
+        }
+        return text;
+    }
+
     async handleFile(file) {
         if (!file) return;
         if (file.name.toLowerCase().endsWith('.zip')) {
@@ -725,7 +761,8 @@ class ZenReaderApp {
         }
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const text = await this.decodeText(new Uint8Array(e.target.result));
+            let text = await this.decodeText(new Uint8Array(e.target.result));
+            text = await this.processExternalText(text);
             await window.ZenOPFS.saveFile(file.name, text);
             const book = new window.ZenBook(file.name, text);
             book.loadProgress();

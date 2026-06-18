@@ -149,10 +149,12 @@ class GDriveModule {
         });
     }
 
-    async handleAuthClick() {
+    async handleAuthClick(skipFetchFolder = false) {
         if (this.accessToken && this.expiresAt > Date.now()) {
-            const targetFolderId = this.currentPath.length > 0 ? this.currentPath[this.currentPath.length - 1].id : 'root';
-            this.fetchFolder(targetFolderId);
+            if (!skipFetchFolder) {
+                const targetFolderId = this.currentPath.length > 0 ? this.currentPath[this.currentPath.length - 1].id : 'root';
+                this.fetchFolder(targetFolderId);
+            }
             return;
         }
 
@@ -165,8 +167,10 @@ class GDriveModule {
 
             if (data && data.access_token) {
                 this.accessToken = data.access_token;
-                const targetFolderId = this.currentPath.length > 0 ? this.currentPath[this.currentPath.length - 1].id : 'root';
-                this.fetchFolder(targetFolderId);
+                if (!skipFetchFolder) {
+                    const targetFolderId = this.currentPath.length > 0 ? this.currentPath[this.currentPath.length - 1].id : 'root';
+                    this.fetchFolder(targetFolderId);
+                }
             } else {
                 throw new Error('Failed to get access token');
             }
@@ -315,7 +319,10 @@ class GDriveModule {
                     this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveZipDev') : 'ZIP support coming soon.');
                 }
             } else {
-                const text = this.app.decodeText(mergedArray);
+                let text = this.app.decodeText(mergedArray);
+                if (this.app.processExternalText) {
+                    text = await this.app.processExternalText(text);
+                }
                 await window.ZenOPFS.saveFile(fileName, text);
                 const book = new window.ZenBook(fileName, text);
                 book.loadProgress();

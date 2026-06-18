@@ -1013,7 +1013,7 @@ body.reading-mode .logo {
     opacity: 0.8;
     pointer-events: none;
     z-index: 10;
-    max-width: 200px;
+    max-width: 60vw;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

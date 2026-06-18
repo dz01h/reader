@@ -66,6 +66,7 @@ class ZenReadingLog {
             const requests = [];
             let hasProgress = info.sheets.some(s => s.properties.title === "progress");
             let hasTtsDict = info.sheets.some(s => s.properties.title === "tts_dict");
+            let hasReplaceDict = info.sheets.some(s => s.properties.title === "用詞替換表");
             
             if (!hasProgress && info.sheets && info.sheets.length > 0) {
                 const firstSheet = info.sheets[0].properties;
@@ -92,6 +93,27 @@ class ZenReadingLog {
                                 { userEnteredValue: { stringValue: "漢字" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
                                 { userEnteredValue: { stringValue: "拼音" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
                                 { userEnteredValue: { stringValue: "注音" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
+                            ]
+                        }],
+                        fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
+                    }
+                });
+            }
+
+            if (!hasReplaceDict) {
+                const repSheetId = Math.floor(Math.random() * 1000000) + 2000;
+                requests.push({
+                    addSheet: {
+                        properties: { title: "用詞替換表", sheetId: repSheetId }
+                    }
+                });
+                requests.push({
+                    updateCells: {
+                        range: { sheetId: repSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 2 },
+                        rows: [{
+                            values: [
+                                { userEnteredValue: { stringValue: "取代詞" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                { userEnteredValue: { stringValue: "目標詞" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
                             ]
                         }],
                         fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
@@ -172,7 +194,8 @@ class ZenReadingLog {
                         properties: { title: "Reading Log" },
                         sheets: [
                             { properties: { title: "progress", sheetId: 0 } },
-                            { properties: { title: "tts_dict", sheetId: 1 } }
+                            { properties: { title: "tts_dict", sheetId: 1 } },
+                            { properties: { title: "用詞替換表", sheetId: 2 } }
                         ]
                     })
                 });
@@ -210,6 +233,18 @@ class ZenReadingLog {
                                                 { userEnteredValue: { stringValue: "漢字" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
                                                 { userEnteredValue: { stringValue: "拼音" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
                                                 { userEnteredValue: { stringValue: "注音" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
+                                            ]
+                                        }],
+                                        fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
+                                    }
+                                },
+                                {
+                                    updateCells: {
+                                        range: { sheetId: 2, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 2 },
+                                        rows: [{
+                                            values: [
+                                                { userEnteredValue: { stringValue: "取代詞" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                                { userEnteredValue: { stringValue: "目標詞" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
                                             ]
                                         }],
                                         fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
@@ -304,6 +339,15 @@ class ZenReadingLog {
         let remoteTimestamp = localTimestamp;
         let foundAny = matchingIndices.length > 0;
 
+        let tsString = localTimestamp;
+        if (typeof tsString === 'number' && tsString > 0) {
+            tsString = new Date(tsString).toISOString();
+        } else if (!tsString) {
+            tsString = new Date().toISOString();
+        } else {
+            tsString = String(tsString);
+        }
+
         if (foundAny) {
             remoteProgress = parseFloat(values[matchingIndices[0]][1]) || 0.0;
             remoteTimestamp = values[matchingIndices[0]][2] || "";
@@ -355,7 +399,7 @@ class ZenReadingLog {
                         values: [
                             { userEnteredValue: { stringValue: filename } },
                             { userEnteredValue: { numberValue: localProgress } },
-                            { userEnteredValue: { stringValue: localTimestamp || new Date().toISOString() } }
+                            { userEnteredValue: { stringValue: tsString } }
                         ]
                     }],
                     fields: "userEnteredValue"
@@ -432,6 +476,38 @@ class ZenReadingLog {
         }
 
         try {
+            // Check if this book is still at the top row (A2)
+            let checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (checkRes.status === 400) {
+                console.log("Got 400 reading progress, attempting schema upgrade...");
+                await this.upgradeSheetSchema(token, sheetId);
+                checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+            }
+
+            if (checkRes.status === 404) {
+                this.sheetId = null;
+                localStorage.removeItem('zen_reader_sheet_id');
+                this.updateSyncStatus('error', 'Sheet not found (404)');
+                return;
+            }
+
+            if (checkRes.ok) {
+                const checkData = await checkRes.json();
+                const currentTopBook = (checkData.values && checkData.values[0] && checkData.values[0][0]) ? checkData.values[0][0] : null;
+                
+                if (currentTopBook !== filename) {
+                    console.log(`Top book changed (found ${currentTopBook}), falling back to full sync.`);
+                    this.syncing = false; // Release lock for full sync
+                    await this.syncSheetProgress(filename, progress, timestamp);
+                    return;
+                }
+            }
+
             const payload = {
                 values: [[filename, progress, timestamp]]
             };
@@ -519,6 +595,88 @@ class ZenReadingLog {
             console.error("Error fetching TTS dict:", e);
             return {};
         }
+    }
+
+    async getReplacementDict() {
+        const sheetId = await this.getSheetId();
+        if (!sheetId) return [];
+
+        const token = await this.gdrive.getAccessToken();
+        if (!token) return [];
+
+        let shouldFetch = true;
+        let cachedDict = null;
+
+        try {
+            // Check Google Drive file modifiedTime
+            const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${sheetId}?fields=modifiedTime`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (metaRes.ok) {
+                const meta = await metaRes.json();
+                const remoteModifiedTime = new Date(meta.modifiedTime).getTime();
+
+                // Check local cache
+                if (window.ZenOPFS && window.ZenOPFS.loadCacheFile) {
+                    const cacheStr = await window.ZenOPFS.loadCacheFile('replacement_dict.json');
+                    if (cacheStr) {
+                        const cacheData = JSON.parse(cacheStr);
+                        if (cacheData.modifiedTime === remoteModifiedTime) {
+                            shouldFetch = false;
+                            cachedDict = cacheData.dict;
+                        }
+                    }
+                }
+                
+                if (shouldFetch) {
+                    // Fetch the dict
+                    let res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/用詞替換表!A2:B1000`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    
+                    if (res.status === 400) {
+                        console.log("Got 400 fetching 用詞替換表, attempting schema upgrade...");
+                        await this.upgradeSheetSchema(token, sheetId);
+                        res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/用詞替換表!A2:B1000`, {
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                    }
+                    
+                    if (res.ok) {
+                        const data = await res.json();
+                        const dict = [];
+                        if (data.values) {
+                            for (let row of data.values) {
+                                const replacement = row[0]; // 取代詞
+                                const target = row[1]; // 目標詞
+                                if (replacement && target) {
+                                    dict.push({ target: target.trim(), replacement: replacement.trim() });
+                                }
+                            }
+                        }
+                        
+                        if (window.ZenOPFS && window.ZenOPFS.saveCacheFile) {
+                            await window.ZenOPFS.saveCacheFile('replacement_dict.json', JSON.stringify({
+                                modifiedTime: remoteModifiedTime,
+                                dict: dict
+                            }));
+                        }
+                        
+                        return dict;
+                    } else {
+                        console.warn("Failed to fetch 用詞替換表");
+                    }
+                }
+            }
+        } catch(e) {
+            console.warn('Cache logic failed, falling back to fetch', e);
+        }
+
+        if (!shouldFetch && cachedDict) {
+            return cachedDict;
+        }
+        
+        return [];
     }
 }
 

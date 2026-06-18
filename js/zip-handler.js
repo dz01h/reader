@@ -58,7 +58,10 @@ class ZipHandler {
         this.app.showToast(`正在解壓縮 ${fileName}...`);
         try {
             const uint8array = await zipEntry.async("uint8array");
-            const text = this.app.decodeText(uint8array);
+            let text = this.app.decodeText(uint8array);
+            if (this.app.processExternalText) {
+                text = await this.app.processExternalText(text);
+            }
             
             const finalName = `[${zipName}] ${fileName}`;
             await window.ZenOPFS.saveFile(finalName, text);

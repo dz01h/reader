@@ -8,6 +8,38 @@ class OPFSModule {
         return await root.getDirectoryHandle(this.dirName, { create: true });
     }
 
+    async getCacheDir() {
+        const root = await navigator.storage.getDirectory();
+        const readerDir = await root.getDirectoryHandle(this.dirName, { create: true });
+        return await readerDir.getDirectoryHandle('.cache', { create: true });
+    }
+
+    async saveCacheFile(filename, content) {
+        try {
+            const dir = await this.getCacheDir();
+            const fileHandle = await dir.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            return true;
+        } catch (e) {
+            console.error('OPFS saveCacheFile error:', e);
+            throw e;
+        }
+    }
+
+    async loadCacheFile(filename) {
+        try {
+            const dir = await this.getCacheDir();
+            const fileHandle = await dir.getFileHandle(filename);
+            const file = await fileHandle.getFile();
+            return await file.text();
+        } catch (e) {
+            // Usually means file doesn't exist yet, which is normal for cache
+            return null;
+        }
+    }
+
     async saveFile(filename, content) {
         try {
             const dir = await this.getDir();
