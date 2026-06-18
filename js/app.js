@@ -698,6 +698,18 @@ class ZenReaderApp {
             // update local save immediately
             this.currentBook.timestamp = new Date(remote.time).getTime();
             this.currentBook.saveProgress(remote.progress);
+        } else {
+            // User rejected remote progress. Force overwrite the cloud with current local progress.
+            if (this.readingLog) {
+                // Force update bypassing optimistic concurrency check
+                this.readingLog.updateSheetProgress(
+                    this.currentBook.filename,
+                    localProg,
+                    new Date().toISOString(),
+                    true
+                );
+                this.showToast('已保留本機進度並覆寫雲端');
+            }
         }
     }
 

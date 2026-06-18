@@ -7,6 +7,7 @@ class ZenReadingLog {
         this.syncCooldown = 15;
         this.isInited = false;
         this.syncing = false;
+        this.lastCloudTime = 0;
 
         document.body.addEventListener('ReadingOver', (e) => {
             this.handleReadingOver(e.detail.prog);
@@ -112,8 +113,8 @@ class ZenReadingLog {
                         range: { sheetId: repSheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 2 },
                         rows: [{
                             values: [
-                                { userEnteredValue: { stringValue: "取代詞" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
-                                { userEnteredValue: { stringValue: "目標詞" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
+                                { userEnteredValue: { stringValue: "尋找詞彙" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                { userEnteredValue: { stringValue: "替換為" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
                             ]
                         }],
                         fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
@@ -243,8 +244,8 @@ class ZenReadingLog {
                                         range: { sheetId: 2, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: 2 },
                                         rows: [{
                                             values: [
-                                                { userEnteredValue: { stringValue: "取代詞" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
-                                                { userEnteredValue: { stringValue: "目標詞" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
+                                                { userEnteredValue: { stringValue: "尋找詞彙" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } },
+                                                { userEnteredValue: { stringValue: "替換為" }, userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.95, green: 0.95, blue: 0.95 } } }
                                             ]
                                         }],
                                         fields: "userEnteredValue,userEnteredFormat.textFormat,userEnteredFormat.backgroundColor"
@@ -424,6 +425,7 @@ class ZenReadingLog {
                     return null;
                 }
                 if (res.ok) {
+                    this.lastCloudTime = new Date(tsString).getTime();
                     this.updateSyncStatus('success');
                 } else {
                     const errData = await res.json();
@@ -446,6 +448,7 @@ class ZenReadingLog {
             const isCloudDifferent = Math.abs(remoteProgress - localProgress) > 0.00001;
             
             if ((isLocalEmpty || remoteTime > localTime) && isCloudDifferent) {
+                this.lastCloudTime = remoteTime;
                 return { progress: remoteProgress, time: remoteTimestamp };
             }
         }
@@ -458,7 +461,7 @@ class ZenReadingLog {
         return null;
     }
 
-    async updateSheetProgress(filename, progress, timestamp) {
+    async updateSheetProgress(filename, progress, timestamp, force = false) {
         if (!this.isInited || this.syncing) return;
         this.syncing = true;
         this.updateSyncStatus('syncing');
@@ -476,15 +479,15 @@ class ZenReadingLog {
         }
 
         try {
-            // Check if this book is still at the top row (A2)
-            let checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2`, {
+            // Check if this book is still at the top row (A2:C2) to compare progress
+            let checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (checkRes.status === 400) {
                 console.log("Got 400 reading progress, attempting schema upgrade...");
                 await this.upgradeSheetSchema(token, sheetId);
-                checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2`, {
+                checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
             }
@@ -498,12 +501,26 @@ class ZenReadingLog {
 
             if (checkRes.ok) {
                 const checkData = await checkRes.json();
-                const currentTopBook = (checkData.values && checkData.values[0] && checkData.values[0][0]) ? checkData.values[0][0] : null;
+                const row = checkData.values && checkData.values[0] ? checkData.values[0] : [];
+                const currentTopBook = row[0] || null;
+                const remoteProgress = parseFloat(row[1]) || 0;
+                const remoteTimestamp = row[2] || "";
                 
                 if (currentTopBook !== filename) {
                     console.log(`Top book changed (found ${currentTopBook}), falling back to full sync.`);
                     this.syncing = false; // Release lock for full sync
                     await this.syncSheetProgress(filename, progress, timestamp);
+                    return;
+                }
+
+                const remoteTimeMs = new Date(remoteTimestamp).getTime() || 0;
+                if (!force && remoteTimeMs > this.lastCloudTime && Math.abs(remoteProgress - progress) > 0.00001) {
+                    console.log(`Cloud has newer progress! Cloud: ${remoteTimestamp}, Local Last Sync: ${new Date(this.lastCloudTime).toISOString()}`);
+                    this.syncing = false;
+                    this.lastCloudTime = remoteTimeMs;
+                    document.body.dispatchEvent(new CustomEvent('readingLog', { 
+                        detail: { progress: remoteProgress, time: remoteTimestamp } 
+                    }));
                     return;
                 }
             }
@@ -541,6 +558,7 @@ class ZenReadingLog {
                 return;
             }
             if (res.ok) {
+                this.lastCloudTime = new Date(timestamp).getTime();
                 this.updateSyncStatus('success');
             } else {
                 const errData = await res.json();
@@ -647,8 +665,8 @@ class ZenReadingLog {
                         const dict = [];
                         if (data.values) {
                             for (let row of data.values) {
-                                const replacement = row[0]; // 取代詞
-                                const target = row[1]; // 目標詞
+                                const target = row[0]; // 尋找詞彙
+                                const replacement = row[1]; // 替換為
                                 if (replacement && target) {
                                     dict.push({ target: target.trim(), replacement: replacement.trim() });
                                 }
