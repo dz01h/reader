@@ -163,7 +163,7 @@ class GDriveModule {
         try {
             const gasUrl = 'https://script.google.com/macros/s/AKfycbz-93PY978YMvbZKH7-RDJNsSJVWISnDVkD4ESSvG5bGudMzAUPMagwqB2sJBZwIJ9nWQ/exec?token=' + encodeURIComponent(location.origin);
 
-            const data = (this.accessToken ? (await this.authSilent(gasUrl)) : null) || (await this.authPopup(gasUrl));
+            const data = await this.authPopup(gasUrl);
 
             if (data && data.access_token) {
                 this.accessToken = data.access_token;
