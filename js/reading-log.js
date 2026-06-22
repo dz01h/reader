@@ -263,6 +263,10 @@ class ZenReadingLog {
     }
 
     async syncSheetProgress(filename, localProgress, localTimestamp) {
+        if (!navigator.onLine) {
+            this.updateSyncStatus('offline');
+            return null;
+        }
         if (this.syncing) return null;
         this.syncing = true;
         this.updateSyncStatus('syncing');
@@ -462,6 +466,10 @@ class ZenReadingLog {
     }
 
     async updateSheetProgress(filename, progress, timestamp, force = false) {
+        if (!navigator.onLine) {
+            this.updateSyncStatus('offline');
+            return;
+        }
         if (!this.isInited || this.syncing) return;
         this.syncing = true;
         this.updateSyncStatus('syncing');
@@ -573,6 +581,7 @@ class ZenReadingLog {
     }
 
     async getCustomTTSDict() {
+        if (!navigator.onLine) return {};
         const sheetId = await this.getSheetId();
         if (!sheetId) return {};
 
@@ -616,6 +625,7 @@ class ZenReadingLog {
     }
 
     async getReplacementDict() {
+        if (!navigator.onLine) return [];
         const sheetId = await this.getSheetId();
         if (!sheetId) return [];
 

@@ -422,7 +422,13 @@ class ZenSettings {
             this.btnOpenReadingLog.addEventListener('click', () => {
                 const sheetId = localStorage.getItem('zen_reader_sheet_id');
                 if (sheetId) {
-                    window.open(`https://docs.google.com/spreadsheets/d/${sheetId}/edit`, '_blank');
+                    const a = document.createElement('a');
+                    a.href = `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+                    a.target = '_blank';
+                    a.rel = 'noopener noreferrer';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
                 } else {
                     this.app.showToast('尚未建立或找到 Reading Log');
                 }

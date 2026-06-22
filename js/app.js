@@ -574,7 +574,7 @@ class ZenReaderApp {
 
         if (!el) return;
 
-        el.classList.remove('hidden', 'syncing', 'success', 'error');
+        el.classList.remove('hidden', 'syncing', 'success', 'error', 'offline');
         el.style.cursor = '';
         el.onclick = null;
 
@@ -602,6 +602,10 @@ class ZenReaderApp {
                 msgEl.textContent = message || (this.i18n ? this.i18n.t('syncError') : 'Sync failed');
                 this.logError(`Sync failed: ${message}`);
             }
+        } else if (status === 'offline') {
+            el.classList.add('offline');
+            timeEl.textContent = new Date().toLocaleTimeString();
+            msgEl.textContent = message || '已離線';
         } else {
             el.classList.add('hidden');
         }

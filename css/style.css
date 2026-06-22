@@ -831,6 +831,10 @@ body.reading-mode .logo {
     background-color: #f56565; /* red */
 }
 
+.sync-status.offline .sync-icon {
+    background-color: #a0aec0; /* dark grey */
+}
+
 .sync-tooltip {
     position: absolute;
     bottom: 1.5rem;
