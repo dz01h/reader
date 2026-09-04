@@ -300,10 +300,6 @@ class ZenReaderApp {
         }
     }
 
-    onScroll(scrollOffset, maxScroll) {
-        // TTS visibility check is now handled via the 'ReadingOver' event in tts.js
-    }
-
     applyLayoutChange() {
         if (!this.currentBook) return;
         const currentPercent = this.readingPanel.maxScroll > 0 ? this.readingPanel.scrollOffset / this.readingPanel.maxScroll : 0;

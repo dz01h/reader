@@ -1,9 +1,7 @@
 class ReadingPanel {
-    constructor(app, canvas) {
+    constructor(app, parent) {
+        this.parent = parent;
         this.app = app;
-        this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
-        this.engine = new window.ZenEngine(this.canvas, this.ctx);
 
         // State
         this.scrollOffset = 0;
@@ -18,20 +16,33 @@ class ReadingPanel {
         this.inertiaFrameId = null;
         this.readingOverTimeout = null;
 
-        this.bindEvents();
-        this.initEventListeners();
+        this.initComponent();
     }
 
-    initEventListeners() {
+    initComponent() {
+        const canvas = this.canvas = document.createElement('canvas');
+        this.parent.appendChild(canvas);
+        this.resize();
+        this.ctx = this.canvas.getContext('2d');
+        this.engine = new window.ZenEngine(canvas, this.ctx);
+
+        // Mouse Events
+        canvas.addEventListener('mousedown', (e) => this.onDragStart(e));
+        window.addEventListener('mousemove', (e) => this.onDragMove(e));
+        window.addEventListener('mouseup', () => this.onDragEnd());
+
+        // Touch Events
+        canvas.addEventListener('touchstart', (e) => this.onDragStart(e), { passive: false });
+        canvas.addEventListener('touchmove', (e) => this.onDragMove(e), { passive: false });
+        canvas.addEventListener('touchend', () => this.onDragEnd());
+
+        // Quadrant Click Navigation
+        canvas.addEventListener('click', (e) => this.handleClick(e));
+
         document.body.addEventListener('ReadingOperation', (e) => {
-            if (e.detail && e.detail.action === 'nextPage') {
-                this.nextPage();
-            } else if (e.detail && e.detail.action === 'prevPage') {
-                this.prevPage();
-            } else if (e.detail && e.detail.action === 'requestReadingOver') {
-                this.dispatchReadingOver();
-            }
+            e.detail && this[e.detail.action] && this[e.detail.action]();
         });
+
     }
 
     reset() {
@@ -60,57 +71,38 @@ class ReadingPanel {
         this.render();
     }
 
-    setScrollOffset(val) {
-        this.scrollOffset = val;
-        this.clampScroll();
-        this.render();
-    }
-
-    clampScroll() {
-        if (this.scrollOffset < 0) this.scrollOffset = 0;
-        if (this.scrollOffset > this.maxScroll) this.scrollOffset = this.maxScroll;
-    }
-
-    render() {
-        if (!this.drawOps || this.drawOps.length === 0) return;
-        this.clampScroll();
-
-        const rect = this.canvas.getBoundingClientRect();
-        // Handle Retina/High-DPI
-        const dpr = Math.max(window.devicePixelRatio || 1, 2);
-        if (this.canvas.width !== rect.width * dpr || this.canvas.height !== rect.height * dpr) {
-            this.canvas.width = rect.width * dpr;
-            this.canvas.height = rect.height * dpr;
+    setScrollOffset(val, dosnap = false) {
+        if (dosnap) {
+            const fontSize = this.app.currentFontSize || 18;
+            const lineHeightRatio = this.app.currentLineHeight || 1.8;
+            const gridStep = fontSize * lineHeightRatio;
+            val = Math.round(val / gridStep) * gridStep;
         }
+
+        this.scrollOffset = Math.max(0, Math.min(val, this.maxScroll));
+        this.render(dosnap);
+    }
+
+    render(stable = false) {
+        if (!this.drawOps || this.drawOps.length === 0) return;
 
         this.engine.drawOperations(
             this.drawOps,
             this.scrollOffset,
             this.app.currentFontSize,
             this.app.currentWritingMode,
-            rect.width,
-            rect.height,
+            this.canvas.offsetWidth,
+            this.canvas.offsetHeight,
             this.app.currentFontFamily,
             this.app.margins
         );
-
-        // Notify app of scroll for UI updates (progress bar, TTS check)
-        if (this.app.onScroll) {
-            this.app.onScroll(this.scrollOffset, this.maxScroll);
-        }
 
         if (document.body.classList.contains('settings-interacting')) {
             this.drawMarginOverlays(rect, dpr);
         }
 
         // Fire ReadingOver event with visible text ONLY when stable (debounced)
-        if (!this.isDragging && !this.inertiaFrameId) {
-            if (this.readingOverTimeout) clearTimeout(this.readingOverTimeout);
-            this.readingOverTimeout = setTimeout(() => {
-                this.dispatchReadingOver();
-                this.readingOverTimeout = null;
-            }, 200);
-        }
+        if(stable) this.dispatchReadingOver();
     }
 
     drawMarginOverlays(rect, dpr) {
@@ -197,45 +189,22 @@ class ReadingPanel {
         this.executeAction('prev', rect);
     }
 
-    bindEvents() {
-        const canvas = this.canvas;
-
-        // Mouse Events
-        canvas.addEventListener('mousedown', (e) => this.onDragStart(e));
-        window.addEventListener('mousemove', (e) => this.onDragMove(e));
-        window.addEventListener('mouseup', () => this.onDragEnd());
-
-        // Touch Events
-        canvas.addEventListener('touchstart', (e) => {
-            if (e.touches.length === 1) this.onDragStart(e.touches[0]);
-        }, { passive: false });
-        canvas.addEventListener('touchmove', (e) => {
-            if (e.touches.length === 1) {
-                e.preventDefault();
-                this.onDragMove(e.touches[0]);
-            }
-        }, { passive: false });
-        canvas.addEventListener('touchend', () => this.onDragEnd());
-
-        // Quadrant Click Navigation
-        canvas.addEventListener('click', (e) => this.handleClick(e));
-    }
-
     onDragStart(e) {
+        let p = e;
         if (!this.drawOps || this.drawOps.length === 0) return;
+        if (e.touches && (p = e.touches[0]) && e.touches.length > 1) return;
         this.isDragging = true;
-        this.lastDragCoord = this.app.currentWritingMode === 'vertical' ? e.screenX : e.screenY;
-        this.lastTime = performance.now();
         this.velocity = 0;
-        if (this.inertiaFrameId) {
-            cancelAnimationFrame(this.inertiaFrameId);
-            this.inertiaFrameId = null;
-        }
+        this.lastDragCoord = this.app.currentWritingMode === 'vertical' ? p.screenX : p.screenY;
+        this.lastTime = performance.now();
     }
 
     onDragMove(e) {
+        let p = e;
         if (!this.isDragging || !this.drawOps || this.drawOps.length === 0) return;
-        const currentCoord = this.app.currentWritingMode === 'vertical' ? e.screenX : e.screenY;
+        if (e.touches && (p = e.touches[0]) && e.touches.length > 1) return; // Ignore multi-touch
+        e.preventDefault();
+        const currentCoord = this.app.currentWritingMode === 'vertical' ? p.screenX : p.screenY;
         const delta = this.app.currentWritingMode === 'vertical' ? (currentCoord - this.lastDragCoord) : (this.lastDragCoord - currentCoord);
         
         const now = performance.now();
@@ -256,25 +225,19 @@ class ReadingPanel {
         if (Math.abs(this.velocity) > 1) {
             this.startInertialScroll(this.velocity * 15, 0.92);
         } else {
-            this.setScrollOffset(this.snapToGrid(this.scrollOffset));
-            this.app.saveProgress();
+            this.setScrollOffset(this.scrollOffset, true);
         }
     }
 
     startInertialScroll(totalDisplacement, friction = 0.95) {
-        if (!this.drawOps || this.drawOps.length === 0) return;
-        if (this.inertiaFrameId) {
-            cancelAnimationFrame(this.inertiaFrameId);
-            this.inertiaFrameId = null;
-        }
+        if (this.inertiaFrameId) cancelAnimationFrame(this.inertiaFrameId);
         
         let currentV = totalDisplacement * (1 - friction);
         
         const loop = () => {
-            if (Math.abs(currentV) < 0.5) {
+            if (this.isDragging || Math.abs(currentV) < 0.5) {
                 this.inertiaFrameId = null;
-                this.setScrollOffset(this.snapToGrid(this.scrollOffset));
-                this.app.saveProgress();
+                this.setScrollOffset(this.scrollOffset, !this.isDragging);
                 return;
             }
             
@@ -342,21 +305,12 @@ class ReadingPanel {
 
         switch (action) {
             case 'prev':
-                this.setScrollOffset(this.snapToGrid(this.scrollOffset - jump));
-                this.app.saveProgress();
+                this.setScrollOffset(this.scrollOffset - jump, true);
                 break;
             case 'next':
-                this.setScrollOffset(this.snapToGrid(this.scrollOffset + jump));
-                this.app.saveProgress();
+                this.setScrollOffset(this.scrollOffset + jump, true);
                 break;
         }
-    }
-
-    snapToGrid(offset) {
-        const fontSize = this.app.currentFontSize || 18;
-        const lineHeightRatio = this.app.currentLineHeight || 1.8;
-        const gridStep = fontSize * lineHeightRatio;
-        return Math.round(offset / gridStep) * gridStep;
     }
     
     getVisibleRange() {
