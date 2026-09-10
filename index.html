@@ -32,6 +32,8 @@
                 <span class="document-title-header" id="document-title"></span>
             </div>
 
+            <input type="file" id="file-input" accept=".txt,.zip,.epub">
+
             <div class="controls">
                 <button id="btn-open-settings" data-i18n="title:openSettings" title="開啟設定">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -40,55 +42,7 @@
         </header>
 
         <!-- Main Content -->
-        <main class="main-content" id="main-content">
-            <!-- Welcome Screen & File Explorer -->
-            <div id="welcome-screen" class="welcome-screen hidden">
-                <div class="welcome-header">
-                    <div class="source-buttons">
-                        <button class="icon-btn active" id="btn-recent-books" data-i18n="title:btnRecentBooks" title="最近閱讀">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                        </button>
-                        <span class="source-divider"></span>
-                        <button class="icon-btn" id="btn-upload" data-i18n="title:btnSelectLocal" title="選擇本機檔案">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                        </button>
-                        <button class="icon-btn" id="btn-gdrive" data-i18n="title:btnGDrive" title="由 Google Drive 載入">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22.06 15.81l-3.26-5.63A2 2 0 0 0 17.06 9H6.94a2 2 0 0 0-1.74 1.18L1.94 15.81A2 2 0 0 0 3.67 19h16.66a2 2 0 0 0 1.73-3.19z"></path><path d="M12 3L1.94 15.81"></path><path d="M6.94 9h15.12"></path></svg>
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="welcome-body" id="welcome-zone">
-                    <ul id="file-explorer-list" class="file-explorer-list inline-list hidden">
-                        <li class="empty-drop-hint file-explorer-empty">
-                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5; margin-bottom:1rem;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                            <div data-i18n="dropzoneHint">將檔案拖曳至此，或自左上角雲端載入</div>
-                        </li>
-                    </ul>
-                    
-                    <div id="recent-books-container" class="recent-books-container">
-                        <h3 class="recent-books-title" data-i18n="recentBooks">最近閱讀</h3>
-                        <div id="recent-books-grid" class="recent-books-grid"></div>
-                    </div>
-                </div>
-                <div class="welcome-footer hidden" id="welcome-footer">
-                    <div id="file-explorer-breadcrumbs" class="file-explorer-breadcrumbs">
-                    </div>
-                    <div class="breadcrumb-overflow-container hidden" id="breadcrumb-overflow-container">
-                        <button class="icon-btn" id="breadcrumb-overflow-btn">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-                        </button>
-                        <div class="breadcrumb-dropdown hidden" id="breadcrumb-dropdown"></div>
-                    </div>
-                </div>
-                <input type="file" id="file-input" accept=".txt,.zip" hidden>
-            </div>
-            
-            <div class="reader-container" id="reader-container">
-                <div id="current-chapter-display" class="current-chapter-display"></div>
-                <canvas id="reader-canvas" class="reader-canvas"></canvas>
-            </div>
-        </main>
+        <main class="main-content" id="main-content"></main>
 
         <footer class="status-bar" id="status-bar">
             <div class="status-main">
@@ -129,171 +83,6 @@
             <div id="toc-list" class="toc-list"></div>
         </div>
     </div>
-    
-    <dialog id="settings-dialog" class="settings-dialog">
-        <div class="dialog-header">
-            <button id="btn-close-settings" class="btn-close">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
-            <h2 data-i18n="settingsTitle">閱讀設定</h2>
-            <div style="width: 24px;"></div>
-        </div>
-        <div class="dialog-body">
-            <div class="setting-group">
-                <label for="setting-lang" data-i18n="settingLanguage">介面語言</label>
-                <select id="setting-lang">
-                    <option value="zh-TW">繁體中文 (Taiwan)</option>
-                    <option value="zh-CN">简体中文 (China)</option>
-                    <option value="en-US">English (US)</option>
-                    <option value="ja-JP">日本語 (Japan)</option>
-                </select>
-            </div>
-            <div class="setting-group">
-                <label for="setting-theme" data-i18n="settingTheme">主題色彩</label>
-                <select id="setting-theme">
-                    <option value="light" data-i18n="themeLight">淺色風格</option>
-                    <option value="dark" data-i18n="themeDark">深色風格</option>
-                </select>
-            </div>
-            <div class="setting-group">
-                <label for="setting-direction" data-i18n="settingDirection">閱讀方向</label>
-                <select id="setting-direction">
-                    <option value="horizontal" data-i18n="dirHorizontal">橫書</option>
-                    <option value="vertical" data-i18n="dirVertical">直書</option>
-                </select>
-            </div>
-            <div class="setting-group">
-                <label for="setting-font-family" data-i18n="settingFontFamily">字體風格</label>
-                <select id="setting-font-family">
-                    <option value="sans-serif" data-i18n="fontSans">無襯線體 (預設黑體)</option>
-                    <option value="serif" data-i18n="fontSerif">襯線體 (明體/宋體)</option>
-                    <option value="monospace" data-i18n="fontMono">等寬字體</option>
-                </select>
-                <button id="btn-load-local-fonts" class="btn btn-secondary" style="margin-top: 10px; width: 100%; display: none;">從本機載入更多字型...</button>
-            </div>
-            <div class="setting-group">
-                <label><span data-i18n="settingFontSize">字體大小: </span><span id="setting-font-size-display">18px</span></label>
-                <div class="custom-slider" id="setting-font-size" data-min="12" data-max="48" data-step="2"></div>
-            </div>
-            <div class="setting-group">
-                <label><span data-i18n="settingLineHeight">行距: </span><span id="setting-line-height-display">1.8</span></label>
-                <div class="custom-slider" id="setting-line-height" data-min="1.0" data-max="3.0" data-step="0.1"></div>
-            </div>
-            <fieldset class="setting-fieldset">
-                <legend data-i18n="settingMarginsGroup">邊距設定 (Pixels)</legend>
-                <div class="setting-group">
-                    <label><span data-i18n="settingMarginTop">上: </span><span id="setting-margin-top-display">30</span></label>
-                    <div class="custom-slider" id="setting-margin-top" data-min="0" data-max="150" data-step="1"></div>
-                </div>
-                <div class="setting-group">
-                    <label><span data-i18n="settingMarginBottom">下: </span><span id="setting-margin-bottom-display">30</span></label>
-                    <div class="custom-slider" id="setting-margin-bottom" data-min="0" data-max="150" data-step="1"></div>
-                </div>
-                <div class="setting-group">
-                    <label><span data-i18n="settingMarginLeft">左: </span><span id="setting-margin-left-display">30</span></label>
-                    <div class="custom-slider" id="setting-margin-left" data-min="0" data-max="150" data-step="1"></div>
-                </div>
-                <div class="setting-group">
-                    <label><span data-i18n="settingMarginRight">右: </span><span id="setting-margin-right-display">30</span></label>
-                    <div class="custom-slider" id="setting-margin-right" data-min="0" data-max="150" data-step="1"></div>
-                </div>
-            </fieldset>
-
-            <fieldset class="setting-fieldset">
-                <legend data-i18n="settingQuadrants">點擊四象限 (隱形換頁按鈕)</legend>
-                <div class="setting-group-row">
-                    <div class="setting-group half">
-                        <label for="setting-quad-tl" data-i18n="quadTL">左上角</label>
-                        <select id="setting-quad-tl">
-                            <option value="prev" data-i18n="actionPrev">上一頁</option>
-                            <option value="next" data-i18n="actionNext">下一頁</option>
-                            <option value="none" data-i18n="actionNone">無功能</option>
-                        </select>
-                    </div>
-                    <div class="setting-group half">
-                        <label for="setting-quad-tr" data-i18n="quadTR">右上角</label>
-                        <select id="setting-quad-tr">
-                            <option value="prev" data-i18n="actionPrev">上一頁</option>
-                            <option value="next" data-i18n="actionNext">下一頁</option>
-                            <option value="none" data-i18n="actionNone">無功能</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="setting-group-row">
-                    <div class="setting-group half">
-                        <label for="setting-quad-bl" data-i18n="quadBL">左下角</label>
-                        <select id="setting-quad-bl">
-                            <option value="prev" data-i18n="actionPrev">上一頁</option>
-                            <option value="next" data-i18n="actionNext">下一頁</option>
-                            <option value="none" data-i18n="actionNone">無功能</option>
-                        </select>
-                    </div>
-                    <div class="setting-group half">
-                        <label for="setting-quad-br" data-i18n="quadBR">右下角</label>
-                        <select id="setting-quad-br">
-                            <option value="prev" data-i18n="actionPrev">上一頁</option>
-                            <option value="next" data-i18n="actionNext">下一頁</option>
-                            <option value="none" data-i18n="actionNone">無功能</option>
-                        </select>
-                    </div>
-                </div>
-            </fieldset>
-
-            <fieldset class="setting-fieldset">
-                <legend data-i18n="settingTTSGroup">TTS 語音設定</legend>
-                <div class="setting-group">
-                    <label for="setting-tts-model" data-i18n="settingTTSModel">語音引擎與模型</label>
-                    <select id="setting-tts-model" style="width: 100%;">
-                        <!-- Will be populated dynamically -->
-                    </select>
-                </div>
-                <div class="setting-group">
-                    <label><span data-i18n="settingTTSSpeed">語音速度: </span><span id="setting-tts-speed-display">1.0</span></label>
-                    <div class="custom-slider" id="setting-tts-speed-slider" data-min="0.5" data-max="2.0" data-step="0.1"></div>
-                </div>
-            </fieldset>
-
-            <fieldset class="setting-fieldset">
-                <legend data-i18n="settingAdvanced">進階整合</legend>
-                <div class="setting-group">
-                    <label for="setting-sync-cooldown" data-i18n="settingSyncCooldown">同步冷卻時間</label>
-                    <select id="setting-sync-cooldown" style="width: 100%;">
-                        <option value="1">1 min</option>
-                        <option value="5">5 min</option>
-                        <option value="10">10 min</option>
-                        <option value="15">15 min</option>
-                        <option value="30">30 min</option>
-                        <option value="60">60 min</option>
-                    </select>
-                </div>
-                <div class="setting-group">
-                    <button id="btn-sync-qr" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnSyncQr">顯示同步 QR Code</button>
-                    <button id="btn-google-login" class="btn-primary" style="width:100%; margin-top: 0.5rem;" data-i18n="text:btnGoogleLogin">登入 Google 帳號</button>
-                    <button id="btn-open-reading-log" class="btn-primary" style="width:100%; margin-top: 0.5rem; display: none;">開啟 Reading Log 編輯</button>
-                    <button id="btn-show-error-log" class="btn-primary" style="width:100%; margin-top: 0.5rem;">系統錯誤紀錄</button>
-                    <button id="btn-clear-cache" class="btn-primary" style="width:100%; margin-top: 0.5rem; background-color: #d9534f;">清除所有快取 (Clear Cache)</button>
-                </div>
-                
-                <div id="qr-container" class="hidden" style="margin-top: 1rem; text-align: center; background: white; padding: 1rem; border-radius: 8px;">
-                    <div id="qr-code"></div>
-                    <p style="color: black; font-size: 0.8rem; margin-top: 0.5rem; font-weight: bold;">使用手機掃描 QR Code 即可自動同步設定</p>
-                </div>
-            </fieldset>
-        </div>
-    </dialog>
-
-    <dialog id="error-log-dialog" class="settings-dialog">
-        <div class="settings-header">
-            <h2 id="error-log-title">系統錯誤紀錄 (Error Log)</h2>
-            <button id="btn-close-error-log" class="icon-btn">✕</button>
-        </div>
-        <div class="settings-body">
-            <pre id="error-log-content" style="font-size: 0.8rem; background: #222; color: #f87171; padding: 1rem; overflow-x: auto; white-space: pre-wrap; height: 300px;"></pre>
-            <button id="btn-clear-error-log" class="btn-primary" style="width: 100%; margin-top: 1rem;">清除紀錄</button>
-        </div>
-    </dialog>
-
-
 
     <!-- JS Engine and logic imports -->
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -302,7 +91,6 @@
     <script src="js/db.js"></script>
     <script src="js/book.js"></script>
     <script src="js/i18n.js"></script>
-    <script src="js/engine.js"></script>
     <script src="js/reading-document.js"></script>
     <script src="js/text-render-engine.js"></script>
     <script src="js/tts/chunks.js"></script>

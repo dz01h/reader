@@ -6,7 +6,7 @@ class ZenReaderApp {
 
         // State
         this.currentFontSize = 18;
-        this.currentWritingMode = 'horizontal';
+        this.currentWritingMode = 'vertical';
         this.currentFontFamily = 'sans-serif';
         this.currentLineHeight = 1.8;
         this.margins = { top: 30, bottom: 30, left: 30, right: 30 };
@@ -26,57 +26,80 @@ class ZenReaderApp {
         this.syncCooldown = 15; // default 15 minutes
         this.lastSyncTime = 0;
 
-        // Ensure dependencies are loaded
-        if (!window.ZenDB || !window.ZenEngine || !window.ReadingPanel || !window.ZenTTS) {
-            console.error("Required module classes (ZenDB, ZenEngine, ReadingPanel, ZenTTS) are missing!");
-            return;
-        }
+        const main = document.querySelector('#main-content');
+        const readerPanel = new ReadingPanel(this, main);
+        const finput = document.getElementById('file-input');
+        finput.addEventListener('change', (e) => {
+            const fileInput = e.target;
+            if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+            // reade text from file
 
-        // Initialize internal modules
-        if (window.I18n) {
-            this.i18n = new window.I18n();
-        }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const textContent = e.target.result;
+                console.log("Loaded text content:", textContent.length, 'words', textContent.substring(0, 100));
+                readerPanel.read(new ReadingDocument(textContent));
+            };
+          
+              // 6. Read the file as plain text
+            reader.readAsText(fileInput.files[0]);
 
-        this.db = new window.ZenDB();
+        });
 
-        this.initDOM();
+        window.currentReaderPanel = readerPanel;
+        
 
-        // Initialize Core Components
-        this.readingPanel = new window.ReadingPanel(this, this.els.canvas);
-        this.engine = this.readingPanel.engine;
-        this.tts = new window.ZenTTS(this);
+        // // Ensure dependencies are loaded
+        // if (!window.ZenDB || !window.ZenEngine || !window.ReadingPanel || !window.ZenTTS) {
+        //     console.error("Required module classes (ZenDB, ZenEngine, ReadingPanel, ZenTTS) are missing!");
+        //     return;
+        // }
 
-        // GDrive module
-        if (window.ZenGDrive) {
-            this.gdrive = new window.ZenGDrive(this);
-        }
+        // // Initialize internal modules
+        // if (window.I18n) {
+        //     this.i18n = new window.I18n();
+        // }
 
-        // Reading Progress Sync
-        if (window.ZenReadingLog) {
-            this.readingLog = new window.ZenReadingLog(this.gdrive);
-        }
+        // this.db = new window.ZenDB();
 
-        // Settings Dialog module
-        if (window.ZenSettings) {
-             this.settings = new window.ZenSettings(this);
-        }
+        // this.initDOM();
 
-        // File Explorer module
-        if (window.FileExplorer) {
-             this.explorer = new window.FileExplorer(this);
-        }
+        // // Initialize Core Components
+        // this.readingPanel = new window.ReadingPanel(this, this.els.canvas);
+        // this.engine = this.readingPanel.engine;
+        // this.tts = new window.ZenTTS(this);
 
-        // Zip Handler module
-        if (window.ZenZipHandler) {
-             this.zipHandler = new window.ZenZipHandler(this);
-        }
+        // // GDrive module
+        // if (window.ZenGDrive) {
+        //     this.gdrive = new window.ZenGDrive(this);
+        // }
 
-        this.bindEvents();
-        this.loadState();
-        this.handleURLSync();
+        // // Reading Progress Sync
+        // if (window.ZenReadingLog) {
+        //     this.readingLog = new window.ZenReadingLog(this.gdrive);
+        // }
 
-        // Listen for remote progress signal from GAS
-        document.body.addEventListener('readingLog', (e) => this.handleRemoteProgress(e.detail));
+        // // Settings Dialog module
+        // if (window.ZenSettings) {
+        //      this.settings = new window.ZenSettings(this);
+        // }
+
+        // // File Explorer module
+        // if (window.FileExplorer) {
+        //      this.explorer = new window.FileExplorer(this);
+        // }
+
+        // // Zip Handler module
+        // if (window.ZenZipHandler) {
+        //      this.zipHandler = new window.ZenZipHandler(this);
+        // }
+
+        // this.bindEvents();
+        // this.loadState();
+        // this.handleURLSync();
+
+        // // Listen for remote progress signal from GAS
+        // document.body.addEventListener('readingLog', (e) => this.handleRemoteProgress(e.detail));
     }
 
     logError(msg) {

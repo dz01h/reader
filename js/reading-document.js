@@ -1,20 +1,26 @@
 class ReadingDocument {
     constructor(text = "") {
-        this.text = text;
+        this.text = text || "";
         // Array of [startOffset, length] for each formatted line
         this.lines = [];
         // Array of { title, lineIndex, charOffset } for chapter bookmarks
         this.chapters = [];
+
+        // Reading Progress State (Single Source of Truth)
+        this.progress = 0.0; // 0.0 ~ 1.0
+        this.timestamp = Date.now();
     }
 
     /**
-     * Set new raw text
+     * Set new raw text and reset state
      * @param {string} text 
      */
     setText(text) {
         this.text = text || "";
         this.lines = [];
         this.chapters = [];
+        this.progress = 0.0;
+        this.timestamp = Date.now();
     }
 
     /**
@@ -95,26 +101,92 @@ class ReadingDocument {
         return Math.max(0, Math.min(low, this.lines.length - 1));
     }
 
+    // ==========================================
+    // Reading Progress Management (0.0 ~ 1.0)
+    // ==========================================
+
     /**
-     * Get reading progress ratio (0.0 ~ 1.0) at line i
-     * @param {number} lineIndex 
-     * @returns {number}
+     * Directly set reading progress ratio (0.0 ~ 1.0)
+     * @param {number} prog Progress ratio between 0.0 and 1.0
+     * @param {number} [timestamp] Optional timestamp in ms, defaults to Date.now()
      */
-    getLineProgress(lineIndex) {
-        if (this.lines.length <= 1) return 0;
-        return Math.max(0, Math.min(1, lineIndex / (this.lines.length - 1)));
+    setProgress(prog, timestamp = Date.now()) {
+        const clamped = Math.max(0, Math.min(1, typeof prog === 'number' ? prog : 0));
+        this.progress = clamped;
+        this.timestamp = timestamp || Date.now();
     }
 
     /**
-     * Find closest line index given a progress ratio (0.0 ~ 1.0)
-     * @param {number} progress 
+     * Update progress from a specific visible line index
+     * Uses character offset for cross-device/cross-resolution invariant precision
+     * @param {number} lineIndex 
+     * @param {number} [timestamp] 
+     */
+    setProgressByLine(lineIndex, timestamp = Date.now()) {
+        if (this.lines.length === 0 || this.text.length === 0) {
+            this.setProgress(0, timestamp);
+            return;
+        }
+        const validIndex = Math.max(0, Math.min(lineIndex, this.lines.length - 1));
+        const [charOffset] = this.lines[validIndex];
+        const prog = charOffset / this.text.length;
+        this.setProgress(prog, timestamp);
+    }
+
+    /**
+     * Get reading progress ratio (0.0 ~ 1.0) at line index
+     * @param {number} lineIndex 
      * @returns {number}
      */
-    findLineByProgress(progress) {
-        if (this.lines.length <= 1) return 0;
-        const target = Math.round(progress * (this.lines.length - 1));
-        return Math.max(0, Math.min(target, this.lines.length - 1));
+    getProgressByLine(lineIndex) {
+        if (this.lines.length === 0 || this.text.length === 0) return 0;
+        const validIndex = Math.max(0, Math.min(lineIndex, this.lines.length - 1));
+        const [charOffset] = this.lines[validIndex];
+        return charOffset / this.text.length;
     }
+
+    /**
+     * Find target line index corresponding to a progress ratio (0.0 ~ 1.0)
+     * @param {number} [prog] Defaults to this.progress
+     * @returns {number} Line index
+     */
+    getLineByProgress(prog = this.progress) {
+        if (this.lines.length === 0 || this.text.length === 0) return 0;
+        const targetCharOffset = Math.round(prog * this.text.length);
+        return this.findLineByCharOffset(targetCharOffset);
+    }
+
+    /**
+     * Get the character offset corresponding to a progress ratio
+     * @param {number} [prog] Defaults to this.progress
+     * @returns {number}
+     */
+    getCharOffsetByProgress(prog = this.progress) {
+        if (!this.text || this.text.length === 0) return 0;
+        return Math.max(0, Math.min(this.text.length, Math.round(prog * this.text.length)));
+    }
+
+    /**
+     * Get current chapter info corresponding to a progress ratio
+     * @param {number} [prog] Defaults to this.progress
+     * @returns {{ title: string, lineIndex: number, charOffset: number } | null}
+     */
+    getCurrentChapter(prog = this.progress) {
+        if (!this.chapters || this.chapters.length === 0) return null;
+        const targetLine = this.getLineByProgress(prog);
+        let currentChapter = this.chapters[0];
+
+        for (let i = 0; i < this.chapters.length; i++) {
+            const ch = this.chapters[i];
+            if (ch.lineIndex <= targetLine) {
+                currentChapter = ch;
+            } else {
+                break;
+            }
+        }
+        return currentChapter;
+    }
+
 }
 
 window.ReadingDocument = ReadingDocument;

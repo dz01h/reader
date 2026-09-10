@@ -6,7 +6,7 @@ class ReadingPanel {
         // State
         this.scrollOffset = 0;
         this.maxScroll = 0;
-        this.drawOps = [];
+        this.doc = null;
 
         // Inertia / Drag State
         this.isDragging = false;
@@ -21,10 +21,12 @@ class ReadingPanel {
 
     initComponent() {
         const canvas = this.canvas = document.createElement('canvas');
+        canvas.classList.add('reader-canvas');
+        (new ResizeObserver(this.resize.bind(this))).observe(canvas);
         this.parent.appendChild(canvas);
-        this.resize();
         this.ctx = this.canvas.getContext('2d');
-        this.engine = new window.ZenEngine(canvas, this.ctx);
+
+        this.engine = null;
 
         // Mouse Events
         canvas.addEventListener('mousedown', (e) => this.onDragStart(e));
@@ -45,10 +47,16 @@ class ReadingPanel {
 
     }
 
+    read(doc) {
+        console.log("ReadingPanel: set document");
+        this.doc = doc;
+        this.resize();
+    }
+
     reset() {
         this.scrollOffset = 0;
         this.maxScroll = 0;
-        this.drawOps = [];
+        this.doc = null;
         if (this.inertiaFrameId) {
             cancelAnimationFrame(this.inertiaFrameId);
             this.inertiaFrameId = null;
@@ -58,9 +66,24 @@ class ReadingPanel {
 
     resize() {
         const rect = this.canvas.getBoundingClientRect();
-        const dpr = Math.max(window.devicePixelRatio || 1, 2);
-        this.canvas.width = rect.width * dpr;
-        this.canvas.height = rect.height * dpr;
+
+        if(!this.engine) this.engine = new window.TextRenderEngine({
+            width: rect.width,
+            height: rect.height,
+            fontSize: this.app.currentFontSize ?? null,
+            fontFamily: this.app.currentFontFamily ?? null,
+            lineHeightRatio: this.app.currentLineHeight ?? null,
+            margins: this.app.margins ?? null,
+            writingMode: this.app.currentWritingMode ?? null
+        });
+
+        this.engine.updateSize(this.canvas);
+
+        if(this.doc) {
+            this.doc.format(this.engine);
+            this.maxScroll = this.engine.getMaxScroll(this.doc);
+        }
+
         this.render();
     }
 
@@ -72,6 +95,8 @@ class ReadingPanel {
     }
 
     setScrollOffset(val, dosnap = false) {
+        if (!this.doc) return;
+        
         if (dosnap) {
             const fontSize = this.app.currentFontSize || 18;
             const lineHeightRatio = this.app.currentLineHeight || 1.8;
@@ -84,17 +109,12 @@ class ReadingPanel {
     }
 
     render(stable = false) {
-        if (!this.drawOps || this.drawOps.length === 0) return;
+        if (!this.doc) return;
 
-        this.engine.drawOperations(
-            this.drawOps,
-            this.scrollOffset,
-            this.app.currentFontSize,
-            this.app.currentWritingMode,
-            this.canvas.offsetWidth,
-            this.canvas.offsetHeight,
-            this.app.currentFontFamily,
-            this.app.margins
+        this.engine.render(
+            this.ctx,
+            this.doc,
+            this.scrollOffset
         );
 
         if (document.body.classList.contains('settings-interacting')) {
@@ -126,7 +146,8 @@ class ReadingPanel {
     }
 
     dispatchReadingOver() {
-        if (!this.drawOps || this.drawOps.length === 0) return;
+        if (!this.doc) return;
+        return;
         const { vMin, vMax, cw, ch } = this.getVisibleRange();
         
         // Find visible characters for current page
@@ -191,7 +212,7 @@ class ReadingPanel {
 
     onDragStart(e) {
         let p = e;
-        if (!this.drawOps || this.drawOps.length === 0) return;
+        if (!this.doc) return;
         if (e.touches && (p = e.touches[0]) && e.touches.length > 1) return;
         this.isDragging = true;
         this.velocity = 0;
@@ -201,7 +222,7 @@ class ReadingPanel {
 
     onDragMove(e) {
         let p = e;
-        if (!this.isDragging || !this.drawOps || this.drawOps.length === 0) return;
+        if (!this.isDragging || !this.doc) return;
         if (e.touches && (p = e.touches[0]) && e.touches.length > 1) return; // Ignore multi-touch
         e.preventDefault();
         const currentCoord = this.app.currentWritingMode === 'vertical' ? p.screenX : p.screenY;
@@ -257,7 +278,7 @@ class ReadingPanel {
     }
 
     handleClick(e) {
-        if (!this.drawOps || this.drawOps.length === 0) return;
+        if (!this.doc) return;
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
