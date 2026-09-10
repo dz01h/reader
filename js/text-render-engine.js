@@ -11,21 +11,21 @@ class TextRenderEngine {
         // Layout & Segmentation Rules (from ZenEngine)
         this.tocRegex = /^\s*(第[零一二三四五六七八九十百千萬0-9０-９]+[章回節卷]|Chapter\s*[0-9]+|正文|楔子|前言|番外)/i;
         this.forceRotateRegex = /^[(){}\[\]〈〉《》「」『』【】〔〕〖〗〘〙〚〛〜︗︘︵︶︷︸︹︺︻︼︽︾︿﹀﹁﹂﹃﹄﹇﹈﹙﹚﹛﹜﹝﹞（）［］｛｝～｟｠｢｣—…｜～]$/;
-        
+
         // Kinsoku Shori (避頭尾規則)
         this.kinsokuHeadRegex = /^[，。、？！：；）》」』】〕〗〙〛︶︸︺︼︾﹀﹂﹄﹈’”]/; // 不可置於行首
         this.kinsokuTailRegex = /^[（《「『【〔〖〘〚︵︷︹︻︽︿﹁﹃﹇‘“]/; // 不可置於行尾
 
         this.wordSpacing = 1; // Additional spacing between words (in pixels)
 
-        // 
+        //
     }
 
     /**
      * Line height in pixels
      */
     get lineHeight() {
-        return this.fontSize * this.lineHeightRatio;
+        return Math.ceil(this.fontSize * this.lineHeightRatio);
     }
 
     /**
@@ -52,12 +52,34 @@ class TextRenderEngine {
     }
 
     /**
+     * Line flow span (usable content span in the line progression direction)
+     */
+    get lineFlowSpan() {
+        return this.writingMode === 'vertical' ? this.contentWidth : this.contentHeight;
+    }
+
+    /**
      * Number of lines visible on a single page
      */
     get linesPerPage() {
-        const span = this.writingMode === 'vertical' ? this.contentWidth : this.contentHeight;
-        if (span < this.fontSize) return 1;
-        return Math.max(1, Math.floor((span - this.fontSize) / this.lineHeight) + 1);
+        return Math.max(1, Math.floor((this.lineFlowSpan - this.fontSize) / this.lineHeight) + 1);
+    }
+
+    /**
+     * Centering grid padding offset
+     */
+    get gridPadding() {
+        const contentSize = this.lineHeight * (this.linesPerPage - 1) + this.fontSize;
+        return Math.max(0, Math.floor((this.lineFlowSpan - contentSize) / 2));
+    }
+
+    /**
+     * Snap scrollOffset to nearest line boundary
+     * @param {number} scrollOffset
+     * @returns {number}
+     */
+    snap(scrollOffset) {
+        return Math.round(scrollOffset / this.lineHeight) * this.lineHeight;
     }
 
     updateSize(canvas) {
@@ -70,7 +92,7 @@ class TextRenderEngine {
 
     /**
      * Update engine dimensions and configuration
-     * @param {Object} options 
+     * @param {Object} options
      */
     updateConfig(options = {}) {
         if (options.width !== undefined) this.width = options.width;
@@ -110,7 +132,7 @@ class TextRenderEngine {
         return this.charSizeMap;
     }
 
-    
+
     inlineLayout(lineText, baseIndex = 0) {
         if (!lineText) return [[baseIndex, 0]];
 
@@ -178,7 +200,7 @@ class TextRenderEngine {
     /**
      * Format raw text into line slices [startOffset, length] and chapter bookmarks
      * Splits by newlines and uses inlineLayout to format each paragraph into renderable lines
-     * @param {string} text 
+     * @param {string} text
      * @returns {{ lines: Array<[number, number]>, chapters: Array<{title: string, lineIndex: number, charOffset: number}> }}
      */
     formatText(text) {
@@ -193,7 +215,7 @@ class TextRenderEngine {
         while (ptr < totalLen) {
             const nextNewline = text.indexOf('\n', ptr);
             const rawEnd = nextNewline === -1 ? totalLen : nextNewline;
-            
+
             // Trim trailing \r if present
             let lineEnd = rawEnd;
             if (lineEnd > ptr && text[lineEnd - 1] === '\r') {
@@ -238,7 +260,7 @@ class TextRenderEngine {
 
     /**
      * Calculate maximum scroll offset for a ReadingDocument
-     * @param {ReadingDocument} doc 
+     * @param {ReadingDocument} doc
      * @returns {number}
      */
     getMaxScroll(doc) {
@@ -251,8 +273,8 @@ class TextRenderEngine {
 
     /**
      * Get visible line range [startLine, endLine] from current scroll offset
-     * @param {number} scrollOffset 
-     * @param {number} totalLines 
+     * @param {number} scrollOffset
+     * @param {number} totalLines
      * @returns {{ startLine: number, endLine: number }}
      */
     getVisibleLineRange(scrollOffset, totalLines = Infinity) {
@@ -263,7 +285,7 @@ class TextRenderEngine {
 
     /**
      * Snap scrollOffset to nearest line boundary
-     * @param {number} scrollOffset 
+     * @param {number} scrollOffset
      * @returns {number}
      */
     snapOffsetToLine(scrollOffset) {
@@ -275,8 +297,8 @@ class TextRenderEngine {
      * Direct canvas rendering of document at given scroll offset
      * Supports overriding layout/styling properties via `options` for real-time settings preview
      * Automatically handles Retina display DPR scaling internally; all offsets and metrics are in CSS logical pixels.
-     * @param {CanvasRenderingContext2D} ctx 
-     * @param {ReadingDocument} doc 
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {ReadingDocument} doc
      * @param {number} scrollOffset Scroll offset in CSS logical pixels
      * @param {Object} options Options to override internal config (fontSize, fontFamily, lineHeightRatio, margins, writingMode, width, height, textColor, showMargins, marginOverlayColor, dpr)
      */
@@ -302,10 +324,12 @@ class TextRenderEngine {
         const padY = Math.max(4, fontSize * 0.1);
 
         // Effective linesPerPage based on resolved logical options
-        const span = isVert 
+        const span = isVert
             ? Math.max(0, width - margins.left - margins.right - padX * 2)
             : Math.max(0, height - margins.top - margins.bottom - padY * 2);
         const linesPerPage = span < fontSize ? 1 : Math.max(1, Math.floor((span - fontSize) / lineHeight) + 1);
+        const contentSize = lineHeight * (linesPerPage - 1) + fontSize;
+        const gridPadding = Math.max(0, Math.floor((span - contentSize) / 2));
 
         const totalLines = doc.getLineCount();
         const startLine = Math.max(0, Math.floor(scrollOffset / lineHeight));
@@ -343,9 +367,11 @@ class TextRenderEngine {
         const wordSpacing = options.wordSpacing !== undefined ? options.wordSpacing : (this.wordSpacing || 0);
         const asciiCharSize = this.getCharSizeMap();
 
-        // Render buffer: 1 extra line before and after for smooth edge rendering
-        const renderStart = Math.max(0, startLine - 1);
-        const renderEnd = Math.min(totalLines - 1, endLine + 1);
+        // When snapped to line, render exact page lines to avoid boundary cut-off artifacts;
+        // when scrolling smoothly, add 1-line buffer to prevent edge pop-in.
+        const isSnapped = Math.abs(scrollOffset - Math.round(scrollOffset / lineHeight) * lineHeight) < 0.5;
+        const renderStart = isSnapped ? startLine : Math.max(0, startLine - 1);
+        const renderEnd = isSnapped ? Math.min(totalLines - 1, startLine + linesPerPage - 1) : Math.min(totalLines - 1, endLine + 1);
 
         for (let i = renderStart; i <= renderEnd; i++) {
             const lineText = doc.getLine(i);
@@ -355,13 +381,13 @@ class TextRenderEngine {
 
             if (isVert) {
                 // Vertical layout: lines flow right-to-left
-                const x = width - margins.right - padX - fontSize - lineOffset;
+                const x = width - margins.right - padX - gridPadding - fontSize - lineOffset;
                 const y = margins.top + padY;
                 this.renderVerticalLine(ctx, lineText, x, y, fontSize, wordSpacing, asciiCharSize);
             } else {
                 // Horizontal layout: lines flow top-to-bottom
                 const x = margins.left + padX;
-                const y = margins.top + padY + lineOffset;
+                const y = margins.top + padY + gridPadding + lineOffset;
                 this.renderHorizontalLine(ctx, lineText, x, y, fontSize, wordSpacing, asciiCharSize);
             }
         }
@@ -379,11 +405,11 @@ class TextRenderEngine {
 
     /**
      * Draw visual guidelines for margins (for settings / layout debugging)
-     * @param {CanvasRenderingContext2D} ctx 
-     * @param {number} w 
-     * @param {number} h 
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {number} w
+     * @param {number} h
      * @param {Object} m Margins { top, bottom, left, right }
-     * @param {string} color 
+     * @param {string} color
      */
     drawMarginOverlays(ctx, w, h, m, color = 'rgba(255, 204, 0, 0.35)') {
         ctx.save();
@@ -397,13 +423,13 @@ class TextRenderEngine {
 
     /**
      * Render a single line in horizontal mode with segment-level wordSpacing
-     * @param {CanvasRenderingContext2D} ctx 
-     * @param {string} lineText 
-     * @param {number} x 
-     * @param {number} y 
-     * @param {number} fontSize 
-     * @param {number} wordSpacing 
-     * @param {Object} asciiCharSize 
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {string} lineText
+     * @param {number} x
+     * @param {number} y
+     * @param {number} fontSize
+     * @param {number} wordSpacing
+     * @param {Object} asciiCharSize
      */
     renderHorizontalLine(ctx, lineText, x, y, fontSize = this.fontSize, wordSpacing = 0, asciiCharSize = null) {
         const segments = lineText.split(/([^\x00-\x7F]|\s)/).filter((s) => s);
@@ -412,7 +438,7 @@ class TextRenderEngine {
         for (let segment of segments) {
             const isAscii = segment.charCodeAt(0) < 128;
             ctx.fillText(segment, curX, y);
-            const segWidth = isAscii 
+            const segWidth = isAscii
                 ? (asciiCharSize ? asciiCharSize.cal(segment) : ctx.measureText(segment).width)
                 : fontSize;
             curX += segWidth + wordSpacing;
@@ -421,13 +447,13 @@ class TextRenderEngine {
 
     /**
      * Render a single line in vertical mode with segment-level wordSpacing & punctuation rotation
-     * @param {CanvasRenderingContext2D} ctx 
-     * @param {string} lineText 
-     * @param {number} x 
-     * @param {number} y 
-     * @param {number} fontSize 
-     * @param {number} wordSpacing 
-     * @param {Object} asciiCharSize 
+     * @param {CanvasRenderingContext2D} ctx
+     * @param {string} lineText
+     * @param {number} x
+     * @param {number} y
+     * @param {number} fontSize
+     * @param {number} wordSpacing
+     * @param {Object} asciiCharSize
      */
     renderVerticalLine(ctx, lineText, x, y, fontSize = this.fontSize, wordSpacing = 0, asciiCharSize = null) {
         const segments = lineText.split(/([^\x00-\x7F]|\s)/).filter((s) => s);

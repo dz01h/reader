@@ -94,17 +94,19 @@ class ReadingPanel {
         this.render();
     }
 
+    snapToGrid(val) {
+        return this.engine ? this.engine.snap(val) : val;
+    }
+
     setScrollOffset(val, dosnap = false) {
         if (!this.doc) return;
-        
-        if (dosnap) {
-            const fontSize = this.app.currentFontSize || 18;
-            const lineHeightRatio = this.app.currentLineHeight || 1.8;
-            const gridStep = fontSize * lineHeightRatio;
-            val = Math.round(val / gridStep) * gridStep;
-        }
+
+        if (dosnap && this.engine) val = this.engine.snap(val);
 
         this.scrollOffset = Math.max(0, Math.min(val, this.maxScroll));
+
+        console.log('offset:', this.scrollOffset);
+
         this.render(dosnap);
     }
 
@@ -132,7 +134,7 @@ class ReadingPanel {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
         ctx.fillStyle = 'rgba(255, 204, 0, 0.4)';
-        
+
         const m = this.app.margins || { top: 0, bottom: 0, left: 0, right: 0 };
         const w = rect.width;
         const h = rect.height;
@@ -149,7 +151,7 @@ class ReadingPanel {
         if (!this.doc) return;
         return;
         const { vMin, vMax, cw, ch } = this.getVisibleRange();
-        
+
         // Find visible characters for current page
         const visibleOps = this.drawOps.filter(o => {
             const coord = this.app.currentWritingMode === 'vertical' ? o.x : o.y;
@@ -163,16 +165,16 @@ class ReadingPanel {
         const gridStep = fontSize * lineHeightRatio;
         const padX = Math.max(4, fontSize * 0.1);
         const padY = Math.max(4, fontSize * 0.1);
-        const viewSize = this.app.currentWritingMode === 'vertical' 
+        const viewSize = this.app.currentWritingMode === 'vertical'
             ? (cw - margins.left - margins.right - padX * 2)
             : (ch - margins.top - margins.bottom - padY * 2);
-        
+
         let maxLines = 1;
         if (viewSize >= fontSize) {
             maxLines = Math.floor((viewSize - fontSize) / gridStep) + 1;
         }
         const jump = maxLines * gridStep;
-        
+
         let next_vMin, next_vMax;
         if (this.app.currentWritingMode === 'vertical') {
             next_vMin = -(this.scrollOffset + jump);
@@ -190,9 +192,9 @@ class ReadingPanel {
         let text = visibleOps.map(o => o.char).join('');
         let nextText = nextVisibleOps.map(o => o.char).join('');
         const prog = this.maxScroll > 0 ? this.scrollOffset / this.maxScroll : 0;
-        
+
         document.body.dispatchEvent(new CustomEvent('ReadingOver', {
-            detail: { 
+            detail: {
                 reading: text,
                 nextReading: nextText,
                 prog: prog
@@ -227,14 +229,14 @@ class ReadingPanel {
         e.preventDefault();
         const currentCoord = this.app.currentWritingMode === 'vertical' ? p.screenX : p.screenY;
         const delta = this.app.currentWritingMode === 'vertical' ? (currentCoord - this.lastDragCoord) : (this.lastDragCoord - currentCoord);
-        
+
         const now = performance.now();
         const dt = Math.max(1, now - this.lastTime);
-        this.velocity = (delta / dt) * 16.67; 
-        
+        this.velocity = (delta / dt) * 16.67;
+
         this.lastDragCoord = currentCoord;
         this.lastTime = now;
-        
+
         this.scrollOffset += delta;
         this.render();
     }
@@ -242,7 +244,7 @@ class ReadingPanel {
     onDragEnd() {
         if (!this.isDragging) return;
         this.isDragging = false;
-        
+
         if (Math.abs(this.velocity) > 1) {
             this.startInertialScroll(this.velocity * 15, 0.92);
         } else {
@@ -252,26 +254,26 @@ class ReadingPanel {
 
     startInertialScroll(totalDisplacement, friction = 0.95) {
         if (this.inertiaFrameId) cancelAnimationFrame(this.inertiaFrameId);
-        
+
         let currentV = totalDisplacement * (1 - friction);
-        
+
         const loop = () => {
             if (this.isDragging || Math.abs(currentV) < 0.5) {
                 this.inertiaFrameId = null;
                 this.setScrollOffset(this.scrollOffset, !this.isDragging);
                 return;
             }
-            
+
             this.scrollOffset += currentV;
             this.render();
             currentV *= friction;
-            
+
             if (this.scrollOffset < 0 || this.scrollOffset > this.maxScroll) {
                 currentV *= 0.5;
                 if (this.scrollOffset < 0) this.scrollOffset = 0;
                 if (this.scrollOffset > this.maxScroll) this.scrollOffset = this.maxScroll;
             }
-            
+
             this.inertiaFrameId = requestAnimationFrame(loop);
         };
         loop();
@@ -304,25 +306,12 @@ class ReadingPanel {
     }
 
     executeAction(action, rect) {
-        const margins = this.app.margins || { top: 0, bottom: 0, left: 0, right: 0 };
-        const fontSize = this.app.currentFontSize || 18;
-        const lineHeightRatio = this.app.currentLineHeight || 1.8;
-        const gridStep = fontSize * lineHeightRatio;
+        const linesPerPage = this.engine ? this.engine.linesPerPage : 1;
+        const lineHeight = this.engine ? this.engine.lineHeight : Math.ceil((this.app.currentFontSize || 18) * (this.app.currentLineHeight || 1.8));
 
-        const padX = Math.max(4, fontSize * 0.1);
-        const padY = Math.max(4, fontSize * 0.1);
-        const viewSize = this.app.currentWritingMode === 'vertical' 
-            ? (rect.width - margins.left - margins.right - padX * 2)
-            : (rect.height - margins.top - margins.bottom - padY * 2);
-        
-        let maxLines = 1;
-        if (viewSize >= fontSize) {
-            maxLines = Math.floor((viewSize - fontSize) / gridStep) + 1;
-        }
-        
         // 保留 1 行作為閱讀銜接
-        const linesToJump = maxLines > 1 ? maxLines - 1 : 1;
-        const jump = linesToJump * gridStep;
+        const linesToJump = linesPerPage > 1 ? linesPerPage - 1 : 1;
+        const jump = linesToJump * lineHeight;
 
         switch (action) {
             case 'prev':
@@ -333,7 +322,7 @@ class ReadingPanel {
                 break;
         }
     }
-    
+
     getVisibleRange() {
         const rect = this.canvas.getBoundingClientRect();
         const cw = rect.width;
