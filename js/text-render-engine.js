@@ -4,7 +4,7 @@ class TextRenderEngine {
         this.height = options.height || 600;
         this.fontSize = options.fontSize || 18;
         this.fontFamily = options.fontFamily || 'sans-serif';
-        this.lineHeightRatio = options.lineHeightRatio || 1.8;
+        this.lineHeightRatio = options.lineHeightRatio || 2.0;
         this.margins = options.margins || { top: 30, bottom: 30, left: 30, right: 30 };
         this.writingMode = options.writingMode || 'horizontal'; // 'horizontal' | 'vertical'
 
@@ -17,8 +17,7 @@ class TextRenderEngine {
         this.kinsokuTailRegex = /^[（《「『【〔〖〘〚︵︷︹︻︽︿﹁﹃﹇‘“]/; // 不可置於行尾
 
         this.wordSpacing = 1; // Additional spacing between words (in pixels)
-
-        //
+        this.renderCache = null; // Sliding window render cache
     }
 
     /**
@@ -29,19 +28,17 @@ class TextRenderEngine {
     }
 
     /**
-     * Usable content width (excluding margins and inner padding)
+     * Usable content width (excluding margins)
      */
     get contentWidth() {
-        const padX = Math.max(4, this.fontSize * 0.1);
-        return Math.max(0, this.width - this.margins.left - this.margins.right - padX * 2);
+        return Math.max(0, this.width - this.margins.left - this.margins.right);
     }
 
     /**
-     * Usable content height (excluding margins and inner padding)
+     * Usable content height (excluding margins)
      */
     get contentHeight() {
-        const padY = Math.max(4, this.fontSize * 0.1);
-        return Math.max(0, this.height - this.margins.top - this.margins.bottom - padY * 2);
+        return Math.max(0, this.height - this.margins.top - this.margins.bottom);
     }
 
     /**
@@ -62,7 +59,7 @@ class TextRenderEngine {
      * Number of lines visible on a single page
      */
     get linesPerPage() {
-        return Math.max(1, Math.floor((this.lineFlowSpan - this.fontSize) / this.lineHeight) + 1);
+        return Math.max(1, Math.floor(this.lineFlowSpan/ this.lineHeight));
     }
 
     /**
@@ -105,7 +102,8 @@ class TextRenderEngine {
         if (options.dpr !== undefined) this.dpr = options.dpr;
         if (options.wordSpacing !== undefined) this.wordSpacing = options.wordSpacing;
 
-        // Invalidate cached character measurements when font settings change
+        // Invalidate cached measurements and render window when config changes
+        this.renderCache = null;
         if (options.fontSize !== undefined || options.fontFamily !== undefined) {
             this.charSizeMap = null;
         }
@@ -133,9 +131,13 @@ class TextRenderEngine {
     }
 
 
-    inlineLayout(lineText, baseIndex = 0) {
-        if (!lineText) return [[baseIndex, 0]];
-
+    /**
+     * Format a single paragraph line into wrapped lines and their text character offsets
+     * @param {string} lineText
+     * @param {number} [baseOffset] Starting character offset of this paragraph in the document
+     * @returns {{ lines: Array<string>, lineIndexs: Array<number> }}
+     */
+    inlineLayout(lineText, baseOffset = 0) {
         const maxLineLength = this.maxLineLength;
         const wordSpacing = this.wordSpacing || 0;
         const asciiCharSize = this.getCharSizeMap(); // Map of ASCII characters to their widths in pixels
@@ -143,18 +145,31 @@ class TextRenderEngine {
         // 拆成：非 ASCII 字元（單字）、ASCII 英文單字區塊、以及獨立的空白字元（Space/Tab）
         const segments = lineText.split(/([^\x00-\x7F]|\s+)/).filter((s) => s);
 
-        const rez = [];
+        const lines = [];
+        const lineIndexs = [];
         let p = -wordSpacing; // Start with negative spacing to offset the first character
-        let idx = baseIndex;
-        let position = null;
-0
+        let buffer = "";
+        let lineStartInParagraph = -1;
+        let charIndex = 0;
+
+        const flushLine = () => {
+            if (buffer.length > 0) {
+                lines.push(buffer);
+                lineIndexs.push(baseOffset + (lineStartInParagraph !== -1 ? lineStartInParagraph : 0));
+                buffer = "";
+            }
+            p = -wordSpacing;
+            lineStartInParagraph = -1;
+        };
+
         for (let segment of segments) {
-            if(!position) position = [idx, 0];
-            const isSpace = /\s+/.test(segment);
-            if(position[1] === 0 && isSpace) {
-                idx += segment.length; // Advance index for skipped spaces
-                position[0] = idx;
-                continue; // Skip leading spaces at the start of a line
+            const segLen = segment.length;
+            const isSpace = /^\s+$/.test(segment);
+
+            // Skip leading spaces at the start of a line
+            if (!buffer.length && isSpace) {
+                charIndex += segLen;
+                continue;
             }
 
             let segmentSize = this.fontSize;
@@ -164,151 +179,143 @@ class TextRenderEngine {
             }
             segmentSize += wordSpacing;
 
-            if (p + segmentSize > maxLineLength) {
-                if (position[1] > 0) rez.push(position);
-                position = [idx, 0];
-                p = -wordSpacing; // Reset position for new line
+            if (p + segmentSize > maxLineLength && buffer.length > 0) {
+                flushLine();
+                if (isSpace) {
+                    charIndex += segLen;
+                    continue;
+                }
             }
 
-            if (segmentSize > maxLineLength) {
-                // If a single segment exceeds the max line length, split it
-                let l = 0;
-                let inlinePos = [idx, 0];
+            if (segmentSize > maxLineLength && isAscii && !isSpace) {
+                // If a single segment exceeds the max line length, split it character by character
                 for (let i = 0; i < segment.length; i++) {
                     const char = segment[i];
                     const charSize = (asciiCharSize[char] || asciiCharSize[' ']) + wordSpacing;
-                    if (l + charSize > maxLineLength) {
-                        if (inlinePos[1] > 0) rez.push(inlinePos);
-                        inlinePos = [idx + i, 0];
-                        l = 0;
+                    if (p + charSize > maxLineLength && buffer.length > 0) {
+                        flushLine();
                     }
-                    inlinePos[1]++;
-                    l += charSize;
+                    if (lineStartInParagraph === -1) {
+                        lineStartInParagraph = charIndex + i;
+                    }
+                    buffer += char;
+                    p += charSize;
                 }
-                if (inlinePos[1] > 0) rez.push(inlinePos);
             } else {
-                position[1] += segment.length;
+                if (lineStartInParagraph === -1) {
+                    lineStartInParagraph = charIndex;
+                }
+                buffer += segment;
                 p += segmentSize;
             }
-            idx += segment.length;
-        }
-        if (position && position[1] > 0) rez.push(position);
 
-        return rez;
+            charIndex += segLen;
+        }
+
+        flushLine();
+
+        const result = { lines, lineIndexs };
+        // Allow iterating directly: for (let l of inlineLayout(...))
+        result[Symbol.iterator] = function*() {
+            yield* this.lines;
+        };
+
+        return result;
     }
 
     /**
-     * Format raw text into line slices [startOffset, length] and chapter bookmarks
-     * Splits by newlines and uses inlineLayout to format each paragraph into renderable lines
-     * @param {string} text
-     * @returns {{ lines: Array<[number, number]>, chapters: Array<{title: string, lineIndex: number, charOffset: number}> }}
+     * Get or format sliding window render data for the document at its current progress
+     * Compares cached progress with doc.progress, and only formats when changed or forced.
+     * @param {ReadingDocument} doc 
+     * @param {number|boolean} [lineNumberOrForce] Number of lines or boolean forceUpdate
+     * @param {boolean} [forceUpdate] 
+     * @returns {{ progress: number, lines: Array<string>, lineIndexs: Array<number>, zeroIndex: number, totalLength: number, totalLines: number } | null}
      */
-    formatText(text) {
-        if (!text) return { lines: [], chapters: [] };
+    getRenderData(doc, lineNumberOrForce = 50, forceUpdate = false) {
+        if (!doc || !doc.text) {
+            this.renderCache = null;
+            return null;
+        }
 
-        const startTime = performance.now();
-        const lines = [];
-        const chapters = [];
-        let ptr = 0;
-        const totalLen = text.length;
+        let lineNumber = 50;
+        let force = false;
+        if (typeof lineNumberOrForce === 'boolean') {
+            force = lineNumberOrForce;
+        } else if (typeof lineNumberOrForce === 'number') {
+            lineNumber = lineNumberOrForce;
+            force = !!forceUpdate;
+        }
 
-        while (ptr < totalLen) {
-            const nextNewline = text.indexOf('\n', ptr);
-            const rawEnd = nextNewline === -1 ? totalLen : nextNewline;
+        // Return cached window if progress and document are identical
+        if (
+            !force &&
+            this.renderCache &&
+            this.renderCache.progress === doc.progress
+        ) {
+            return this.renderCache;
+        }
 
-            // Trim trailing \r if present
-            let lineEnd = rawEnd;
-            if (lineEnd > ptr && text[lineEnd - 1] === '\r') {
-                lineEnd--;
+        const rawData = doc.getRenderData(lineNumber);
+        if (!rawData || !rawData.lines) {
+            this.renderCache = null;
+            return null;
+        }
+
+        const formattedLines = [];
+        const formattedLineIndexs = [];
+        let formattedZeroIndex = 0;
+
+        for (let i = 0; i < rawData.lines.length; i++) {
+            const rawLine = rawData.lines[i];
+            const rawPos = rawData.lineIndexs ? rawData.lineIndexs[i] : (rawData.startCharOffset || 0);
+
+            if (i === rawData.zeroIndex) {
+                formattedZeroIndex = formattedLines.length;
             }
 
-            const rawLine = text.substring(ptr, lineEnd);
-
-            // 1. Chapter Title Detection
-            if (rawLine.length < 50 && this.tocRegex.test(rawLine)) {
-                // Pre-spacing: 2 empty lines before chapter title (except at document start)
-                if (lines.length > 0) {
-                    lines.push([ptr, 0]);
-                    lines.push([ptr, 0]);
-                }
-                chapters.push({
-                    title: rawLine.trim(),
-                    lineIndex: lines.length,
-                    charOffset: ptr
-                });
-            }
-
-            // 2. Format line using inlineLayout (跳過完全空白或僅含空白字元的行)
             if (rawLine.trim().length === 0) {
-                lines.push([ptr, 0]);
+                formattedLines.push('');
+                formattedLineIndexs.push(rawPos);
             } else {
-                const subLines = this.inlineLayout(rawLine, ptr);
-                for (let i = 0; i < subLines.length; i++) {
-                    lines.push(subLines[i]);
+                const layoutRes = this.inlineLayout(rawLine, rawPos);
+                for (let k = 0; k < layoutRes.lines.length; k++) {
+                    formattedLines.push(layoutRes.lines[k]);
+                    formattedLineIndexs.push(layoutRes.lineIndexs[k]);
                 }
             }
-
-            // Advance pointer past \n
-            ptr = rawEnd + 1;
         }
 
-        const elapsed = (performance.now() - startTime).toFixed(2);
-        console.log(`[TextRenderEngine] Format completed: ${totalLen.toLocaleString()} chars, ${lines.length.toLocaleString()} lines, ${chapters.length} chapters in ${elapsed}ms`);
+        rawData.lines = formattedLines;
+        rawData.lineIndexs = formattedLineIndexs;
+        rawData.zeroIndex = formattedZeroIndex;
+        rawData.totalLines = formattedLines.length;
+        rawData.totalLength = rawData.totalLength || doc.text.length;
 
-        return { lines, chapters };
+        this.renderCache = rawData;
+
+        return this.renderCache;
     }
 
     /**
-     * Calculate maximum scroll offset for a ReadingDocument
-     * @param {ReadingDocument} doc
-     * @returns {number}
-     */
-    getMaxScroll(doc) {
-        if (!doc || doc.getLineCount() === 0) return 0;
-        const totalLines = doc.getLineCount();
-        const visibleLines = this.linesPerPage;
-        const maxScrollLines = Math.max(0, totalLines - visibleLines);
-        return maxScrollLines * this.lineHeight;
-    }
-
-    /**
-     * Get visible line range [startLine, endLine] from current scroll offset
-     * @param {number} scrollOffset
-     * @param {number} totalLines
-     * @returns {{ startLine: number, endLine: number }}
-     */
-    getVisibleLineRange(scrollOffset, totalLines = Infinity) {
-        const startLine = Math.max(0, Math.floor(scrollOffset / this.lineHeight));
-        const endLine = Math.min(totalLines - 1, startLine + this.linesPerPage);
-        return { startLine, endLine };
-    }
-
-    /**
-     * Snap scrollOffset to nearest line boundary
-     * @param {number} scrollOffset
-     * @returns {number}
-     */
-    snapOffsetToLine(scrollOffset) {
-        const lineIdx = Math.round(scrollOffset / this.lineHeight);
-        return lineIdx * this.lineHeight;
-    }
-
-    /**
-     * Direct canvas rendering of document at given scroll offset
+     * Direct canvas rendering of document using windowed on-demand render data
      * Supports overriding layout/styling properties via `options` for real-time settings preview
      * Automatically handles Retina display DPR scaling internally; all offsets and metrics are in CSS logical pixels.
      * @param {CanvasRenderingContext2D} ctx
      * @param {ReadingDocument} doc
-     * @param {number} scrollOffset Scroll offset in CSS logical pixels
-     * @param {Object} options Options to override internal config (fontSize, fontFamily, lineHeightRatio, margins, writingMode, width, height, textColor, showMargins, marginOverlayColor, dpr)
+     * @param {number} scrollOffset Screen dragging offset in CSS logical pixels (0 = anchor at top/right)
+     * @param {Object} options Options to override internal config (fontSize, fontFamily, lineHeightRatio, margins, writingMode, width, height, textColor, showMargins, marginOverlayColor, dpr, forceUpdate)
      */
     render(ctx, doc, scrollOffset = 0, options = {}) {
-        if (!doc || doc.getLineCount() === 0) return;
+        if (!doc || !doc.text) return;
 
-        // 1. Resolve and sync DPR scaling
+        // 1. Get windowed render data
+        const renderData = this.getRenderData(doc, options.forceUpdate);
+        if (!renderData || !renderData.lines || renderData.lines.length === 0) return;
+
+        const { lines, zeroIndex } = renderData;
+
+        // 2. Resolve parameters & DPR
         const dpr = this.dpr;
-
-        // 2. Resolve CSS logical dimensions (options > instance state > canvas client rect)
         const width = options.width !== undefined ? options.width : this.width;
         const height = options.height !== undefined ? options.height : this.height;
         const fontSize = options.fontSize !== undefined ? options.fontSize : this.fontSize;
@@ -317,84 +324,73 @@ class TextRenderEngine {
         const margins = options.margins !== undefined ? { ...this.margins, ...options.margins } : this.margins;
         const writingMode = options.writingMode !== undefined ? options.writingMode : this.writingMode;
         const textColor = options.textColor || '#ffffff';
+        const wordSpacing = options.wordSpacing !== undefined ? options.wordSpacing : (this.wordSpacing || 0);
 
         const isVert = writingMode === 'vertical';
         const lineHeight = fontSize * lineHeightRatio;
-        const padX = Math.max(4, fontSize * 0.1);
-        const padY = Math.max(4, fontSize * 0.1);
 
         // Effective linesPerPage based on resolved logical options
         const span = isVert
-            ? Math.max(0, width - margins.left - margins.right - padX * 2)
-            : Math.max(0, height - margins.top - margins.bottom - padY * 2);
-        const linesPerPage = span < fontSize ? 1 : Math.max(1, Math.floor((span - fontSize) / lineHeight) + 1);
+            ? Math.max(0, width - margins.left - margins.right)
+            : Math.max(0, height - margins.top - margins.bottom);
+        // const linesPerPage = span < fontSize ? 1 : Math.max(1, Math.floor((span - fontSize) / lineHeight) + 1);
+        const linesPerPage = span < fontSize ? 1 : Math.max(1, Math.floor(span / lineHeight));
         const contentSize = lineHeight * (linesPerPage - 1) + fontSize;
         const gridPadding = Math.max(0, Math.floor((span - contentSize) / 2));
 
-        const totalLines = doc.getLineCount();
-        const startLine = Math.max(0, Math.floor(scrollOffset / lineHeight));
-        const endLine = Math.min(totalLines - 1, startLine + linesPerPage);
-
         ctx.save();
-
-        // 3. Set transform to DPR scale so all drawing calls below operate directly in CSS logical pixels!
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        // 3.1 Clear entire canvas to eliminate ghosting / trails from previous frames
+        // Clear entire canvas to eliminate ghosting / trails from previous frames
         ctx.clearRect(0, 0, width, height);
 
-        // 4. Clip to usable content area (margins)
+        // Clip to usable content area with outward safety buffer to protect protruding glyph strokes (e.g. 竹字頭, accents, ascenders)
+        const clipBuffer = Math.max(4, Math.ceil(fontSize * 0.15));
         ctx.beginPath();
         ctx.rect(
-            margins.left,
-            margins.top,
-            Math.max(0, width - margins.left - margins.right),
-            Math.max(0, height - margins.top - margins.bottom)
+            Math.max(0, margins.left - clipBuffer),
+            Math.max(0, margins.top - clipBuffer),
+            Math.min(width, width - margins.left - margins.right + clipBuffer * 2),
+            Math.min(height, height - margins.top - margins.bottom + clipBuffer * 2)
         );
         ctx.clip();
-
-        // 5. Translate context based on scroll offset (logical pixels)
-        if (isVert) {
-            ctx.translate(scrollOffset, 0);
-        } else {
-            ctx.translate(0, -scrollOffset);
-        }
 
         ctx.fillStyle = textColor;
         ctx.font = `${fontSize}px ${fontFamily}`;
         ctx.textBaseline = 'top';
 
-        const wordSpacing = options.wordSpacing !== undefined ? options.wordSpacing : (this.wordSpacing || 0);
-        const asciiCharSize = this.getCharSizeMap();
-
-        // When snapped to line, render exact page lines to avoid boundary cut-off artifacts;
-        // when scrolling smoothly, add 1-line buffer to prevent edge pop-in.
-        const isSnapped = Math.abs(scrollOffset - Math.round(scrollOffset / lineHeight) * lineHeight) < 0.5;
-        const renderStart = isSnapped ? startLine : Math.max(0, startLine - 1);
-        const renderEnd = isSnapped ? Math.min(totalLines - 1, startLine + linesPerPage - 1) : Math.min(totalLines - 1, endLine + 1);
-
-        for (let i = renderStart; i <= renderEnd; i++) {
-            const lineText = doc.getLine(i);
+        // 3. Render lines relative to zeroIndex and scrollOffset
+        for (let i = 0; i < lines.length; i++) {
+            const lineText = lines[i];
             if (!lineText) continue;
 
-            const lineOffset = i * lineHeight;
+            const relativeIdx = i - zeroIndex;
+            const lineShift = relativeIdx * lineHeight;
 
             if (isVert) {
-                // Vertical layout: lines flow right-to-left
-                const x = width - margins.right - padX - gridPadding - fontSize - lineOffset;
-                const y = margins.top + padY;
-                this.renderVerticalLine(ctx, lineText, x, y, fontSize, wordSpacing, asciiCharSize);
+                const x = width - margins.right - gridPadding - fontSize - lineShift + scrollOffset;
+                const y = margins.top;
+
+                // Viewport horizontal culling
+                if (x + fontSize < margins.left || x > width - margins.right) {
+                    continue;
+                }
+                this.renderVerticalLine(ctx, lineText, x, y, fontSize, wordSpacing);
             } else {
-                // Horizontal layout: lines flow top-to-bottom
-                const x = margins.left + padX;
-                const y = margins.top + padY + gridPadding + lineOffset;
-                this.renderHorizontalLine(ctx, lineText, x, y, fontSize, wordSpacing, asciiCharSize);
+                const x = margins.left;
+                const y = margins.top + gridPadding + lineShift + scrollOffset;
+
+                // Viewport vertical culling
+                if (y + lineHeight < margins.top || y > height - margins.bottom) {
+                    continue;
+                }
+                this.renderHorizontalLine(ctx, lineText, x, y, fontSize, wordSpacing);
             }
         }
 
         ctx.restore();
 
-        // 6. Optional: Draw Margin Overlay guidelines (in logical pixels)
+        // 4. Optional Margin Overlay
         if (options.showMargins || options.drawMarginOverlay) {
             ctx.save();
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -429,19 +425,15 @@ class TextRenderEngine {
      * @param {number} y
      * @param {number} fontSize
      * @param {number} wordSpacing
-     * @param {Object} asciiCharSize
      */
-    renderHorizontalLine(ctx, lineText, x, y, fontSize = this.fontSize, wordSpacing = 0, asciiCharSize = null) {
+    renderHorizontalLine(ctx, lineText, x, y, fontSize = this.fontSize, wordSpacing = 0) {
         const segments = lineText.split(/([^\x00-\x7F]|\s)/).filter((s) => s);
         let curX = x;
 
         for (let segment of segments) {
             const isAscii = segment.charCodeAt(0) < 128;
             ctx.fillText(segment, curX, y);
-            const segWidth = isAscii
-                ? (asciiCharSize ? asciiCharSize.cal(segment) : ctx.measureText(segment).width)
-                : fontSize;
-            curX += segWidth + wordSpacing;
+            curX += (isAscii ? ctx.measureText(segment).width : fontSize) + wordSpacing;
         }
     }
 
@@ -453,9 +445,8 @@ class TextRenderEngine {
      * @param {number} y
      * @param {number} fontSize
      * @param {number} wordSpacing
-     * @param {Object} asciiCharSize
      */
-    renderVerticalLine(ctx, lineText, x, y, fontSize = this.fontSize, wordSpacing = 0, asciiCharSize = null) {
+    renderVerticalLine(ctx, lineText, x, y, fontSize = this.fontSize, wordSpacing = 0) {
         const segments = lineText.split(/([^\x00-\x7F]|\s)/).filter((s) => s);
         let curY = y;
 
@@ -476,26 +467,25 @@ class TextRenderEngine {
                 curY += fontSize + wordSpacing;
             } else {
                 // ASCII segment (Digits, English words, or Spaces)
-                if (/^\d{1,2}$/.test(segment)) {
+                const segLen = ctx.measureText(segment).width;
+                if (segment.length <= 2) {
                     // Tate-chu-yoko (縱中橫排 for 1~2 digits)
-                    const w = ctx.measureText(segment).width;
-                    const drawX = x + (fontSize - w) / 2;
+                    const drawX = x + (fontSize - segLen) / 2;
                     ctx.fillText(segment, drawX, curY);
-                    curY += fontSize + wordSpacing;
+                    curY += fontSize;
                 } else if (/^\s+$/.test(segment)) {
-                    const spaceHeight = asciiCharSize ? asciiCharSize.cal(segment) : (fontSize * 0.5);
-                    curY += spaceHeight + wordSpacing;
+                    curY += segLen;
                 } else {
                     // Rotated English word
-                    const segLen = asciiCharSize ? asciiCharSize.cal(segment) : ctx.measureText(segment).width;
                     ctx.save();
                     ctx.translate(x + fontSize / 2, curY);
                     ctx.rotate(Math.PI / 2);
                     ctx.textBaseline = 'middle';
                     ctx.fillText(segment, 0, 0);
                     ctx.restore();
-                    curY += segLen + wordSpacing;
+                    curY += segLen;
                 }
+                curY += wordSpacing; // Add spacing after ASCII segment
             }
         }
     }

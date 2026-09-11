@@ -4,9 +4,9 @@ class ReadingPanel {
         this.app = app;
 
         // State
-        this.scrollOffset = 0;
-        this.maxScroll = 0;
         this.doc = null;
+        this.engine = null;
+        this.scrollOffset = 0; // Drag displacement in CSS logical pixels relative to zeroIndex
 
         // Inertia / Drag State
         this.isDragging = false;
@@ -14,7 +14,6 @@ class ReadingPanel {
         this.velocity = 0;
         this.lastTime = 0;
         this.inertiaFrameId = null;
-        this.readingOverTimeout = null;
 
         this.initComponent();
     }
@@ -25,8 +24,6 @@ class ReadingPanel {
         (new ResizeObserver(this.resize.bind(this))).observe(canvas);
         this.parent.appendChild(canvas);
         this.ctx = this.canvas.getContext('2d');
-
-        this.engine = null;
 
         // Mouse Events
         canvas.addEventListener('mousedown', (e) => this.onDragStart(e));
@@ -41,194 +38,183 @@ class ReadingPanel {
         // Quadrant Click Navigation
         canvas.addEventListener('click', (e) => this.handleClick(e));
 
+        // ReadingOperation Event Listener (Next / Prev / Page Actions)
         document.body.addEventListener('ReadingOperation', (e) => {
-            e.detail && this[e.detail.action] && this[e.detail.action]();
+            if (e.detail && e.detail.action && typeof this[e.detail.action] === 'function') {
+                this[e.detail.action]();
+            }
         });
-
     }
 
     read(doc) {
-        console.log("ReadingPanel: set document");
         this.doc = doc;
+        this.scrollOffset = 0;
+        if (this.inertiaFrameId) {
+            cancelAnimationFrame(this.inertiaFrameId);
+            this.inertiaFrameId = null;
+        }
         this.resize();
     }
 
     reset() {
         this.scrollOffset = 0;
-        this.maxScroll = 0;
         this.doc = null;
         if (this.inertiaFrameId) {
             cancelAnimationFrame(this.inertiaFrameId);
             this.inertiaFrameId = null;
         }
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        if (this.ctx && this.canvas) {
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        }
     }
 
     resize() {
+        if (!this.canvas) return;
         const rect = this.canvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
 
-        if(!this.engine) this.engine = new window.TextRenderEngine({
-            width: rect.width,
-            height: rect.height,
-            fontSize: this.app.currentFontSize ?? null,
-            fontFamily: this.app.currentFontFamily ?? null,
-            lineHeightRatio: this.app.currentLineHeight ?? null,
-            margins: this.app.margins ?? null,
-            writingMode: this.app.currentWritingMode ?? null
-        });
-
-        this.engine.updateSize(this.canvas);
-
-        if(this.doc) {
-            this.doc.format(this.engine);
-            this.maxScroll = this.engine.getMaxScroll(this.doc);
+        if (!this.engine) {
+            this.engine = new window.TextRenderEngine({
+                width: rect.width,
+                height: rect.height,
+                fontSize: this.app.currentFontSize ?? 18,
+                fontFamily: this.app.currentFontFamily ?? 'sans-serif',
+                lineHeightRatio: this.app.currentLineHeight ?? 1.8,
+                margins: this.app.margins ?? { top: 30, bottom: 30, left: 30, right: 30 },
+                writingMode: this.app.currentWritingMode ?? 'horizontal',
+                wordSpacing: this.app.currentWordSpacing ?? 1
+            });
+        } else {
+            this.engine.updateConfig({
+                width: rect.width,
+                height: rect.height,
+                fontSize: this.app.currentFontSize,
+                fontFamily: this.app.currentFontFamily,
+                lineHeightRatio: this.app.currentLineHeight,
+                margins: this.app.margins,
+                writingMode: this.app.currentWritingMode,
+                wordSpacing: this.app.currentWordSpacing
+            });
         }
 
-        this.render();
-    }
-
-    setLayout(drawOps, maxScroll, targetScroll) {
-        this.drawOps = drawOps;
-        this.maxScroll = maxScroll;
-        this.scrollOffset = Math.max(0, Math.min(targetScroll, maxScroll));
-        this.render();
+        this.engine.updateSize(this.canvas);
+        this.render(true);
     }
 
     snapToGrid(val) {
         return this.engine ? this.engine.snap(val) : val;
     }
 
-    setScrollOffset(val, dosnap = false) {
+    get progress() {
+        return this.doc ? this.doc.progress : 0;
+    }
+
+    setProgress(prog) {
         if (!this.doc) return;
+        this.doc.setProgress(prog);
+        this.scrollOffset = 0;
+        this.render(true);
+    }
 
-        if (dosnap && this.engine) val = this.engine.snap(val);
-
-        this.scrollOffset = Math.max(0, Math.min(val, this.maxScroll));
-
-        console.log('offset:', this.scrollOffset);
-
-        this.render(dosnap);
+    setScrollOffset(val, dosnap = false) {
+        if (!this.doc || !this.engine) return;
+        this.scrollOffset = dosnap ? this.engine.snap(val) : val;
+        if (dosnap) {
+            this.commitScroll();
+        } else {
+            this.render(false);
+        }
     }
 
     render(stable = false) {
-        if (!this.doc) return;
+        if (!this.doc || !this.engine) return;
 
         this.engine.render(
             this.ctx,
             this.doc,
-            this.scrollOffset
+            this.scrollOffset,
+            {
+                showMargins: document.body.classList.contains('settings-interacting')
+            }
         );
 
-        if (document.body.classList.contains('settings-interacting')) {
-            this.drawMarginOverlays(rect, dpr);
+        // Fire ReadingOver event with visible text ONLY when stable (debounced / committed)
+        if (stable) {
+            this.dispatchReadingOver();
         }
-
-        // Fire ReadingOver event with visible text ONLY when stable (debounced)
-        if(stable) this.dispatchReadingOver();
-    }
-
-    drawMarginOverlays(rect, dpr) {
-        const ctx = this.ctx;
-        ctx.save();
-        // Reset transform first to avoid double-scaling if engine left it scaled
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(dpr, dpr);
-        ctx.fillStyle = 'rgba(255, 204, 0, 0.4)';
-
-        const m = this.app.margins || { top: 0, bottom: 0, left: 0, right: 0 };
-        const w = rect.width;
-        const h = rect.height;
-
-        ctx.fillRect(0, 0, w, m.top);
-        ctx.fillRect(0, h - m.bottom, w, m.bottom);
-        ctx.fillRect(0, m.top, m.left, h - m.top - m.bottom);
-        ctx.fillRect(w - m.right, m.top, m.right, h - m.top - m.bottom);
-
-        ctx.restore();
     }
 
     dispatchReadingOver() {
-        if (!this.doc) return;
-        return;
-        const { vMin, vMax, cw, ch } = this.getVisibleRange();
+        if (!this.doc || !this.engine) return;
 
-        // Find visible characters for current page
-        const visibleOps = this.drawOps.filter(o => {
-            const coord = this.app.currentWritingMode === 'vertical' ? o.x : o.y;
-            return this.app.currentWritingMode === 'vertical' ? (coord >= vMin && coord <= vMax) : (coord >= vMin && coord <= vMax);
-        });
+        const renderData = this.engine.getRenderData(this.doc);
+        if (!renderData || !renderData.lines || renderData.lines.length === 0) return;
 
-        // Find characters for NEXT page
-        const margins = this.app.margins || { top: 0, bottom: 0, left: 0, right: 0 };
-        const fontSize = this.app.currentFontSize || 18;
-        const lineHeightRatio = this.app.currentLineHeight || 1.8;
-        const gridStep = fontSize * lineHeightRatio;
-        const padX = Math.max(4, fontSize * 0.1);
-        const padY = Math.max(4, fontSize * 0.1);
-        const viewSize = this.app.currentWritingMode === 'vertical'
-            ? (cw - margins.left - margins.right - padX * 2)
-            : (ch - margins.top - margins.bottom - padY * 2);
+        const linesPerPage = this.engine.linesPerPage;
+        const zeroIdx = renderData.zeroIndex;
+        const totalLines = renderData.lines.length;
 
-        let maxLines = 1;
-        if (viewSize >= fontSize) {
-            maxLines = Math.floor((viewSize - fontSize) / gridStep) + 1;
+        // Current page text: from zeroIndex to zeroIndex + linesPerPage - 1
+        const curEndIdx = Math.min(totalLines - 1, zeroIdx + linesPerPage - 1);
+        let reading = '';
+        for (let i = zeroIdx; i <= curEndIdx; i++) {
+            const line = renderData.lines[i];
+            const lineText = typeof line === 'string' ? line : (line?.text ?? '');
+            if (lineText) {
+                reading += lineText + '\n';
+            }
         }
-        const jump = maxLines * gridStep;
+        reading = reading.trim();
 
-        let next_vMin, next_vMax;
-        if (this.app.currentWritingMode === 'vertical') {
-            next_vMin = -(this.scrollOffset + jump);
-            next_vMax = cw - (this.scrollOffset + jump);
-        } else {
-            next_vMin = this.scrollOffset + jump;
-            next_vMax = ch + (this.scrollOffset + jump);
+        // Next page text: from zeroIndex + linesPerPage to zeroIndex + 2 * linesPerPage - 1
+        const nextStartIdx = zeroIdx + linesPerPage;
+        const nextEndIdx = Math.min(totalLines - 1, nextStartIdx + linesPerPage - 1);
+        let nextReading = '';
+        for (let i = nextStartIdx; i <= nextEndIdx; i++) {
+            const line = renderData.lines[i];
+            const lineText = typeof line === 'string' ? line : (line?.text ?? '');
+            if (lineText) {
+                nextReading += lineText + '\n';
+            }
         }
-
-        const nextVisibleOps = this.drawOps.filter(o => {
-            const coord = this.app.currentWritingMode === 'vertical' ? o.x : o.y;
-            return this.app.currentWritingMode === 'vertical' ? (coord >= next_vMin && coord <= next_vMax) : (coord >= next_vMin && coord <= next_vMax);
-        });
-
-        let text = visibleOps.map(o => o.char).join('');
-        let nextText = nextVisibleOps.map(o => o.char).join('');
-        const prog = this.maxScroll > 0 ? this.scrollOffset / this.maxScroll : 0;
+        nextReading = nextReading.trim();
 
         document.body.dispatchEvent(new CustomEvent('ReadingOver', {
             detail: {
-                reading: text,
-                nextReading: nextText,
-                prog: prog
+                reading: reading,
+                nextReading: nextReading,
+                prog: this.doc.progress
             }
         }));
     }
 
-    nextPage() {
-        const rect = this.canvas.getBoundingClientRect();
-        this.executeAction('next', rect);
-    }
-
-    prevPage() {
-        const rect = this.canvas.getBoundingClientRect();
-        this.executeAction('prev', rect);
-    }
-
     onDragStart(e) {
-        let p = e;
-        if (!this.doc) return;
-        if (e.touches && (p = e.touches[0]) && e.touches.length > 1) return;
+        if (!this.doc || !this.engine) return;
+        if (e.touches && e.touches.length > 1) return;
+
+        if (this.inertiaFrameId) {
+            cancelAnimationFrame(this.inertiaFrameId);
+            this.inertiaFrameId = null;
+        }
+
+        const p = e.touches ? e.touches[0] : e;
         this.isDragging = true;
         this.velocity = 0;
-        this.lastDragCoord = this.app.currentWritingMode === 'vertical' ? p.screenX : p.screenY;
+        this.lastDragCoord = this.engine.writingMode === 'vertical' ? p.screenX : p.screenY;
         this.lastTime = performance.now();
     }
 
     onDragMove(e) {
-        let p = e;
-        if (!this.isDragging || !this.doc) return;
-        if (e.touches && (p = e.touches[0]) && e.touches.length > 1) return; // Ignore multi-touch
-        e.preventDefault();
-        const currentCoord = this.app.currentWritingMode === 'vertical' ? p.screenX : p.screenY;
-        const delta = this.app.currentWritingMode === 'vertical' ? (currentCoord - this.lastDragCoord) : (this.lastDragCoord - currentCoord);
+        if (!this.isDragging || !this.doc || !this.engine) return;
+        if (e.touches && e.touches.length > 1) return; // Ignore multi-touch gestures
+
+        if (e.cancelable) e.preventDefault();
+
+        const p = e.touches ? e.touches[0] : e;
+        const currentCoord = this.engine.writingMode === 'vertical' ? p.screenX : p.screenY;
+
+        // Content strictly follows finger displacement
+        const delta = currentCoord - this.lastDragCoord;
 
         const now = performance.now();
         const dt = Math.max(1, now - this.lastTime);
@@ -237,46 +223,159 @@ class ReadingPanel {
         this.lastDragCoord = currentCoord;
         this.lastTime = now;
 
-        this.scrollOffset += delta;
-        this.render();
+        // Boundary resistance damping
+        const renderData = this.engine.getRenderData(this.doc);
+        if (renderData) {
+            const isVert = this.engine.writingMode === 'vertical';
+            const forwardLines = renderData.lines.length - 1 - renderData.zeroIndex;
+            const backwardLines = renderData.zeroIndex;
+            const minScroll = isVert ? -backwardLines * this.engine.lineHeight : -forwardLines * this.engine.lineHeight;
+            const maxScroll = isVert ? forwardLines * this.engine.lineHeight : backwardLines * this.engine.lineHeight;
+
+            const nextOffset = this.scrollOffset + delta;
+
+            if ((nextOffset < minScroll && this.doc.progress <= (isVert ? 0 : 1)) || (nextOffset > maxScroll && this.doc.progress >= (isVert ? 1 : 0))) {
+                this.scrollOffset += delta * 0.3;
+            } else {
+                this.scrollOffset = nextOffset;
+            }
+        } else {
+            this.scrollOffset += delta;
+        }
+
+        this.render(false);
     }
 
     onDragEnd() {
         if (!this.isDragging) return;
         this.isDragging = false;
 
-        if (Math.abs(this.velocity) > 1) {
-            this.startInertialScroll(this.velocity * 15, 0.92);
+        if (Math.abs(this.velocity) > 1.5) {
+            this.startInertialScroll(this.velocity * 12, 0.92);
         } else {
-            this.setScrollOffset(this.scrollOffset, true);
+            this.commitScroll();
         }
     }
 
-    startInertialScroll(totalDisplacement, friction = 0.95) {
-        if (this.inertiaFrameId) cancelAnimationFrame(this.inertiaFrameId);
+    startInertialScroll(totalDisplacement, friction = 0.92) {
+        if (this.inertiaFrameId) {
+            cancelAnimationFrame(this.inertiaFrameId);
+            this.inertiaFrameId = null;
+        }
 
         let currentV = totalDisplacement * (1 - friction);
 
         const loop = () => {
-            if (this.isDragging || Math.abs(currentV) < 0.5) {
+            if (this.isDragging) {
                 this.inertiaFrameId = null;
-                this.setScrollOffset(this.scrollOffset, !this.isDragging);
+                return;
+            }
+
+            if (Math.abs(currentV) < 0.5) {
+                this.inertiaFrameId = null;
+                this.commitScroll();
                 return;
             }
 
             this.scrollOffset += currentV;
-            this.render();
+            this.render(false);
             currentV *= friction;
 
-            if (this.scrollOffset < 0 || this.scrollOffset > this.maxScroll) {
-                currentV *= 0.5;
-                if (this.scrollOffset < 0) this.scrollOffset = 0;
-                if (this.scrollOffset > this.maxScroll) this.scrollOffset = this.maxScroll;
+            // Damping near window edges
+            const renderData = this.engine ? this.engine.getRenderData(this.doc) : null;
+            if (renderData) {
+                const isVert = this.engine.writingMode === 'vertical';
+                const forwardLines = renderData.lines.length - 1 - renderData.zeroIndex;
+                const backwardLines = renderData.zeroIndex;
+                const minScroll = isVert ? -backwardLines * this.engine.lineHeight : -forwardLines * this.engine.lineHeight;
+                const maxScroll = isVert ? forwardLines * this.engine.lineHeight : backwardLines * this.engine.lineHeight;
+
+                if (this.scrollOffset < minScroll || this.scrollOffset > maxScroll) {
+                    currentV *= 0.5;
+                    if (this.scrollOffset < minScroll && this.doc.progress <= (isVert ? 0 : 1)) {
+                        this.scrollOffset = minScroll;
+                    }
+                    if (this.scrollOffset > maxScroll && this.doc.progress >= (isVert ? 1 : 0)) {
+                        this.scrollOffset = maxScroll;
+                    }
+                }
             }
 
             this.inertiaFrameId = requestAnimationFrame(loop);
         };
-        loop();
+
+        this.inertiaFrameId = requestAnimationFrame(loop);
+    }
+
+    /**
+     * Calculate new reading progress at target line index within render data
+     * Uses renderData.lineIndexs[targetIdx] and renderData.totalLength for exact character offset precision
+     * @param {Object} renderData
+     * @param {number} targetIdx
+     * @returns {number} Progress ratio (0.0 ~ 1.0)
+     */
+    calculateProgressAtLine(renderData, targetIdx) {
+        if (!renderData || !renderData.lines || renderData.lines.length === 0 || !this.doc || !this.doc.text) {
+            return 0;
+        }
+        const totalLen = renderData.totalLength || this.doc.text.length;
+        if (totalLen === 0) return 0;
+
+        // 1. Direct lookup from lineIndexs (exact strpos)
+        if (renderData.lineIndexs && typeof renderData.lineIndexs[targetIdx] === 'number') {
+            const targetCharOffset = renderData.lineIndexs[targetIdx];
+            return Math.max(0, Math.min(1, targetCharOffset / totalLen));
+        }
+
+        // 2. Lookup if targetLine is object with start offset
+        const targetLine = renderData.lines[targetIdx];
+        if (targetLine && typeof targetLine.start === 'number') {
+            return Math.max(0, Math.min(1, targetLine.start / totalLen));
+        }
+
+        // 3. Fallback calculation using line lengths
+        const zeroIdx = renderData.zeroIndex;
+        let charDelta = 0;
+        if (targetIdx > zeroIdx) {
+            for (let k = zeroIdx; k < targetIdx; k++) {
+                const l = renderData.lines[k];
+                const len = typeof l === 'string' ? l.length : (l?.length ?? 0);
+                charDelta += len + 1;
+            }
+        } else if (targetIdx < zeroIdx) {
+            for (let k = targetIdx; k < zeroIdx; k++) {
+                const l = renderData.lines[k];
+                const len = typeof l === 'string' ? l.length : (l?.length ?? 0);
+                charDelta -= (len + 1);
+            }
+        }
+
+        const currentOffset = Math.round(renderData.progress * totalLen);
+        const newOffset = Math.max(0, Math.min(totalLen, currentOffset + charDelta));
+        return newOffset / totalLen;
+    }
+
+    /**
+     * Snap displacement to nearest line and commit new progress to ReadingDocument
+     */
+    commitScroll() {
+        if (!this.doc || !this.engine) return;
+
+        const lineHeight = this.engine.lineHeight;
+        const isVert = this.engine.writingMode === 'vertical';
+        const linesScrolled = isVert
+            ? Math.round(this.scrollOffset / lineHeight)
+            : -Math.round(this.scrollOffset / lineHeight);
+
+        const renderData = this.engine.getRenderData(this.doc);
+        if (renderData && renderData.lines && renderData.lines.length > 0 && linesScrolled !== 0) {
+            const targetIdx = Math.max(0, Math.min(renderData.lines.length - 1, renderData.zeroIndex + linesScrolled));
+            const newProgress = this.calculateProgressAtLine(renderData, targetIdx);
+            this.doc.setProgress(newProgress);
+        }
+
+        this.scrollOffset = 0;
+        this.render(true);
     }
 
     handleClick(e) {
@@ -285,11 +384,14 @@ class ReadingPanel {
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;
 
+        // Middle 40% toggles UI
         const isMiddleX = x > rect.width * 0.3 && x < rect.width * 0.7;
         const isMiddleY = y > rect.height * 0.3 && y < rect.height * 0.7;
 
         if (isMiddleX && isMiddleY) {
-            this.app.toggleUI();
+            if (this.app && typeof this.app.toggleUI === 'function') {
+                this.app.toggleUI();
+            }
             return;
         }
 
@@ -297,45 +399,46 @@ class ReadingPanel {
         const hh = rect.height / 2;
         let action = 'none';
 
-        if (x < hw && y < hh) action = this.app.quadTL;
-        else if (x >= hw && y < hh) action = this.app.quadTR;
-        else if (x < hw && y >= hh) action = this.app.quadBL;
-        else action = this.app.quadBR;
+        if (x < hw && y < hh) action = this.app.quadTL || 'prev';
+        else if (x >= hw && y < hh) action = this.app.quadTR || 'next';
+        else if (x < hw && y >= hh) action = this.app.quadBL || 'prev';
+        else action = this.app.quadBR || 'next';
 
-        this.executeAction(action, rect);
+        this.executeAction(action);
     }
 
-    executeAction(action, rect) {
-        const linesPerPage = this.engine ? this.engine.linesPerPage : 1;
-        const lineHeight = this.engine ? this.engine.lineHeight : Math.ceil((this.app.currentFontSize || 18) * (this.app.currentLineHeight || 1.8));
-
-        // 保留 1 行作為閱讀銜接
-        const linesToJump = linesPerPage > 1 ? linesPerPage - 1 : 1;
-        const jump = linesToJump * lineHeight;
-
-        switch (action) {
-            case 'prev':
-                this.setScrollOffset(this.scrollOffset - jump, true);
-                break;
-            case 'next':
-                this.setScrollOffset(this.scrollOffset + jump, true);
-                break;
-        }
+    nextPage() {
+        this.executeAction('next');
     }
 
-    getVisibleRange() {
-        const rect = this.canvas.getBoundingClientRect();
-        const cw = rect.width;
-        const ch = rect.height;
-        let vMin, vMax;
-        if (this.app.currentWritingMode === 'vertical') {
-            vMin = -this.scrollOffset;
-            vMax = cw - this.scrollOffset;
+    prevPage() {
+        this.executeAction('prev');
+    }
+
+    executeAction(action) {
+        if (!this.doc || !this.engine) return;
+
+        const linesPerPage = this.engine.linesPerPage;
+        // Keep 1 line overlap for reading continuity
+        const linesToJump = Math.max(1, linesPerPage > 1 ? linesPerPage - 1 : 1);
+
+        const renderData = this.engine.getRenderData(this.doc);
+        if (!renderData || !renderData.lines || renderData.lines.length === 0) return;
+
+        let targetIdx = renderData.zeroIndex;
+        if (action === 'next') {
+            targetIdx = Math.min(renderData.lines.length - 1, renderData.zeroIndex + linesToJump);
+        } else if (action === 'prev') {
+            targetIdx = Math.max(0, renderData.zeroIndex - linesToJump);
         } else {
-            vMin = this.scrollOffset;
-            vMax = ch + this.scrollOffset;
+            return;
         }
-        return { vMin, vMax, cw, ch };
+
+        const newProgress = this.calculateProgressAtLine(renderData, targetIdx);
+        this.doc.setProgress(newProgress);
+
+        this.scrollOffset = 0;
+        this.render(true);
     }
 }
 

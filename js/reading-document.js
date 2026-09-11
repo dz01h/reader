@@ -1,4 +1,5 @@
 class ReadingDocument {
+
     constructor(text = "") {
         this.text = text || "";
         // Array of [startOffset, length] for each formatted line
@@ -24,6 +25,84 @@ class ReadingDocument {
     }
 
     /**
+     * Get sliding window raw lines around current progress for fast on-demand rendering
+     * @param {number} lineNumber Number of raw lines to fetch before and after progress anchor
+     * @returns {{ progress: number, lines: Array<string>, lineIndexs: Array<number>, zeroIndex: number, startCharOffset: number, totalLength: number }}
+     */
+    getRenderData(lineNumber = 50) {
+        const totalLen = this.text.length;
+        if (totalLen === 0) {
+            return { progress: this.progress, lines: [], lineIndexs: [], zeroIndex: 0, startCharOffset: 0, totalLength: 0 };
+        }
+
+        const targetOffset = Math.max(0, Math.min(totalLen - 1, Math.round(this.progress * totalLen)));
+
+        // 1. Find the raw line boundaries containing targetOffset
+        let anchorStart = this.text.lastIndexOf('\n', targetOffset - 1);
+        anchorStart = anchorStart === -1 ? 0 : anchorStart + 1;
+
+        let anchorEnd = this.text.indexOf('\n', targetOffset);
+        anchorEnd = anchorEnd === -1 ? totalLen : anchorEnd;
+
+        // 2. Search backward for up to lineNumber lines
+        const prevStarts = [];
+        let curr = anchorStart > 0 ? anchorStart - 1 : 0;
+        while (curr > 0 && prevStarts.length < lineNumber) {
+            const prevNewline = this.text.lastIndexOf('\n', curr - 1);
+            if (prevNewline === -1) {
+                prevStarts.unshift(0);
+                break;
+            } else {
+                prevStarts.unshift(prevNewline + 1);
+                curr = prevNewline;
+            }
+        }
+
+        // 3. Search forward for up to lineNumber lines
+        const nextEnds = [];
+        let currEnd = anchorEnd;
+        while (currEnd < totalLen && nextEnds.length < lineNumber) {
+            const nextNewline = this.text.indexOf('\n', currEnd + 1);
+            if (nextNewline === -1) {
+                nextEnds.push(totalLen);
+                break;
+            } else {
+                nextEnds.push(nextNewline);
+                currEnd = nextNewline;
+            }
+        }
+
+        const windowStart = prevStarts.length > 0 ? prevStarts[0] : anchorStart;
+        const windowEnd = nextEnds.length > 0 ? nextEnds[nextEnds.length - 1] : anchorEnd;
+
+        const windowText = this.text.substring(windowStart, windowEnd);
+        const rawLines = windowText.split('\n').map(l => l.endsWith('\r') ? l.slice(0, -1) : l);
+        const zeroIndex = prevStarts.length;
+
+        // Compute starting strpos for each raw line
+        const lineIndexs = [];
+        let charPos = windowStart;
+        for (let i = 0; i < rawLines.length; i++) {
+            lineIndexs.push(charPos);
+            const nlIndex = this.text.indexOf('\n', charPos);
+            if (nlIndex !== -1 && nlIndex < windowEnd) {
+                charPos = nlIndex + 1;
+            } else {
+                charPos = windowEnd;
+            }
+        }
+
+        return {
+            progress: this.progress,
+            lines: rawLines,
+            lineIndexs: lineIndexs,
+            zeroIndex: zeroIndex,
+            startCharOffset: windowStart,
+            totalLength: totalLen
+        };
+    }
+
+    /**
      * Format text using the provided TextRenderEngine instance
      * @param {TextRenderEngine} engine 
      */
@@ -45,8 +124,10 @@ class ReadingDocument {
      */
     getLine(i) {
         if (i < 0 || i >= this.lines.length) return "";
-        const [start, len] = this.lines[i];
-        return this.text.substring(start, start + len);
+        const line = this.lines[i];
+        if (typeof line === 'string') return line;
+        if (Array.isArray(line)) return this.text.substring(line[0], line[0] + line[1]);
+        return line?.text ?? "";
     }
 
     /**
@@ -62,9 +143,18 @@ class ReadingDocument {
         const validEnd = Math.max(0, Math.min(endLine, this.lines.length - 1));
         if (validStart > validEnd) return "";
 
-        const startOffset = this.lines[validStart][0];
+        const startLineItem = this.lines[validStart];
+        if (typeof startLineItem === 'string') {
+            let res = "";
+            for (let i = validStart; i <= validEnd; i++) {
+                res += (this.lines[i] || "") + (i < validEnd ? "\n" : "");
+            }
+            return res;
+        }
+
+        const startOffset = Array.isArray(startLineItem) ? startLineItem[0] : (startLineItem.start || 0);
         const lastLine = this.lines[validEnd];
-        const endOffset = lastLine[0] + lastLine[1];
+        const endOffset = Array.isArray(lastLine) ? (lastLine[0] + lastLine[1]) : ((lastLine.start || 0) + (lastLine.length || 0));
 
         return this.text.substring(startOffset, endOffset);
     }
