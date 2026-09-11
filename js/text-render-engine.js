@@ -59,7 +59,7 @@ class TextRenderEngine {
      * Number of lines visible on a single page
      */
     get linesPerPage() {
-        return Math.max(1, Math.floor(this.lineFlowSpan/ this.lineHeight));
+        return Math.max(1, Math.floor(this.lineFlowSpan / this.lineHeight));
     }
 
     /**
@@ -333,7 +333,6 @@ class TextRenderEngine {
         const span = isVert
             ? Math.max(0, width - margins.left - margins.right)
             : Math.max(0, height - margins.top - margins.bottom);
-        // const linesPerPage = span < fontSize ? 1 : Math.max(1, Math.floor((span - fontSize) / lineHeight) + 1);
         const linesPerPage = span < fontSize ? 1 : Math.max(1, Math.floor(span / lineHeight));
         const contentSize = lineHeight * (linesPerPage - 1) + fontSize;
         const gridPadding = Math.max(0, Math.floor((span - contentSize) / 2));
