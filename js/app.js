@@ -8,7 +8,7 @@ class ZenReaderApp {
         this.currentFontSize = 18;
         this.currentWritingMode = 'vertical';
         this.currentFontFamily = 'sans-serif';
-        this.currentLineHeight = 1.8;
+        this.currentLineHeight = 2.0;
         this.margins = { top: 30, bottom: 30, left: 30, right: 30 };
         this.currentBook = null;
         this.ttsSpeed = 1.0;

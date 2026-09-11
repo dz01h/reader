@@ -10,6 +10,10 @@ class ReadingPanel {
 
         // Inertia / Drag State
         this.isDragging = false;
+        this.dragStartX = 0;
+        this.dragStartY = 0;
+        this.dragGap = 8; // Displacement threshold (px) beyond which click action is ignored
+        this.hasMovedPastGap = false;
         this.lastDragCoord = 0;
         this.velocity = 0;
         this.lastTime = 0;
@@ -129,7 +133,7 @@ class ReadingPanel {
     render(stable = false) {
         if (!this.doc || !this.engine) return;
 
-        this.engine.render(
+        const rendingData = this.engine.render(
             this.ctx,
             this.doc,
             this.scrollOffset,
@@ -138,54 +142,10 @@ class ReadingPanel {
             }
         );
 
-        // Fire ReadingOver event with visible text ONLY when stable (debounced / committed)
-        if (stable) {
-            this.dispatchReadingOver();
+        // Fire ReadingPanelRenderOver event with visible text ONLY when stable (debounced / committed)
+        if (stable && rendingData) {
+            document.body.dispatchEvent(new CustomEvent('ReadingPanelRenderOver', { detail: rendingData }));
         }
-    }
-
-    dispatchReadingOver() {
-        if (!this.doc || !this.engine) return;
-
-        const renderData = this.engine.getRenderData(this.doc);
-        if (!renderData || !renderData.lines || renderData.lines.length === 0) return;
-
-        const linesPerPage = this.engine.linesPerPage;
-        const zeroIdx = renderData.zeroIndex;
-        const totalLines = renderData.lines.length;
-
-        // Current page text: from zeroIndex to zeroIndex + linesPerPage - 1
-        const curEndIdx = Math.min(totalLines - 1, zeroIdx + linesPerPage - 1);
-        let reading = '';
-        for (let i = zeroIdx; i <= curEndIdx; i++) {
-            const line = renderData.lines[i];
-            const lineText = typeof line === 'string' ? line : (line?.text ?? '');
-            if (lineText) {
-                reading += lineText + '\n';
-            }
-        }
-        reading = reading.trim();
-
-        // Next page text: from zeroIndex + linesPerPage to zeroIndex + 2 * linesPerPage - 1
-        const nextStartIdx = zeroIdx + linesPerPage;
-        const nextEndIdx = Math.min(totalLines - 1, nextStartIdx + linesPerPage - 1);
-        let nextReading = '';
-        for (let i = nextStartIdx; i <= nextEndIdx; i++) {
-            const line = renderData.lines[i];
-            const lineText = typeof line === 'string' ? line : (line?.text ?? '');
-            if (lineText) {
-                nextReading += lineText + '\n';
-            }
-        }
-        nextReading = nextReading.trim();
-
-        document.body.dispatchEvent(new CustomEvent('ReadingOver', {
-            detail: {
-                reading: reading,
-                nextReading: nextReading,
-                prog: this.doc.progress
-            }
-        }));
     }
 
     onDragStart(e) {
@@ -199,6 +159,9 @@ class ReadingPanel {
 
         const p = e.touches ? e.touches[0] : e;
         this.isDragging = true;
+        this.dragStartX = p.clientX;
+        this.dragStartY = p.clientY;
+        this.hasMovedPastGap = false;
         this.velocity = 0;
         this.lastDragCoord = this.engine.writingMode === 'vertical' ? p.screenX : p.screenY;
         this.lastTime = performance.now();
@@ -208,9 +171,16 @@ class ReadingPanel {
         if (!this.isDragging || !this.doc || !this.engine) return;
         if (e.touches && e.touches.length > 1) return; // Ignore multi-touch gestures
 
-        if (e.cancelable) e.preventDefault();
-
         const p = e.touches ? e.touches[0] : e;
+
+        if (!this.hasMovedPastGap) {
+            const dist = Math.hypot(p.clientX - this.dragStartX, p.clientY - this.dragStartY);
+            if (dist > this.dragGap) {
+                this.hasMovedPastGap = true;
+            }
+        }
+
+        if (e.cancelable) e.preventDefault();
         const currentCoord = this.engine.writingMode === 'vertical' ? p.screenX : p.screenY;
 
         // Content strictly follows finger displacement
@@ -380,6 +350,10 @@ class ReadingPanel {
 
     handleClick(e) {
         if (!this.doc) return;
+        if (this.hasMovedPastGap) {
+            this.hasMovedPastGap = false;
+            return;
+        }
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;

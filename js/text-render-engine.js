@@ -304,13 +304,14 @@ class TextRenderEngine {
      * @param {ReadingDocument} doc
      * @param {number} scrollOffset Screen dragging offset in CSS logical pixels (0 = anchor at top/right)
      * @param {Object} options Options to override internal config (fontSize, fontFamily, lineHeightRatio, margins, writingMode, width, height, textColor, showMargins, marginOverlayColor, dpr, forceUpdate)
+     * @returns {Object | null} renderData
      */
     render(ctx, doc, scrollOffset = 0, options = {}) {
-        if (!doc || !doc.text) return;
+        if (!doc || !doc.text) return null;
 
         // 1. Get windowed render data
         const renderData = this.getRenderData(doc, options.forceUpdate);
-        if (!renderData || !renderData.lines || renderData.lines.length === 0) return;
+        if (!renderData || !renderData.lines || renderData.lines.length === 0) return null;
 
         const { lines, zeroIndex } = renderData;
 
@@ -396,6 +397,8 @@ class TextRenderEngine {
             this.drawMarginOverlays(ctx, width, height, margins, options.marginOverlayColor);
             ctx.restore();
         }
+
+        return renderData;
     }
 
     /**
