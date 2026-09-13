@@ -1,5 +1,7 @@
 class ZenReaderApp {
     constructor() {
+        window._app = this;
+
         // Global Error Logging
         window.addEventListener('error', (e) => this.logError(`${e.message} at ${e.filename}:${e.lineno}`));
         window.addEventListener('unhandledrejection', (e) => this.logError(`Unhandled Rejection: ${e.reason}`));
@@ -26,8 +28,17 @@ class ZenReaderApp {
         this.syncCooldown = 15; // default 15 minutes
         this.lastSyncTime = 0;
 
+        /*
         const main = document.querySelector('#main-content');
         const readerPanel = new ReadingPanel(this, main);
+
+        */
+
+        // for(let c of document.querySelectorAll('[component]')) {
+        //     console.log(c);
+        //     new window[c.getAttribute('component')](this, c);
+        // }
+
         const finput = document.getElementById('file-input');
         finput.addEventListener('change', (e) => {
             const fileInput = e.target;
@@ -38,16 +49,18 @@ class ZenReaderApp {
             reader.onload = (e) => {
                 const textContent = e.target.result;
                 console.log("Loaded text content:", textContent.length, 'words', textContent.substring(0, 100));
-                readerPanel.read(new ReadingDocument(textContent));
+                // readerPanel.read(new ReadingDocument(textContent));
+                document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: {
+                    action: 'read',
+                    params: [new ReadingDocument(textContent)]
+                } }))
             };
-          
+
               // 6. Read the file as plain text
             reader.readAsText(fileInput.files[0]);
 
         });
 
-        window.currentReaderPanel = readerPanel;
-        
 
         // // Ensure dependencies are loaded
         // if (!window.ZenDB || !window.ZenEngine || !window.ReadingPanel || !window.ZenTTS) {
@@ -295,7 +308,7 @@ class ZenReaderApp {
 
         for (let i = 0; i < this.toc.length; i++) {
             const chapter = this.toc[i];
-            
+
             let l = 0, r = ops.length - 1;
             let ans = 0;
             while (l <= r) {
@@ -316,7 +329,7 @@ class ZenReaderApp {
                 } else {
                     offset = op.y - startY;
                 }
-                
+
                 offset = Math.max(0, Math.min(offset, this.readingPanel.maxScroll));
                 chapter.percent = this.readingPanel.maxScroll > 0 ? offset / this.readingPanel.maxScroll : 0;
             }
@@ -335,7 +348,7 @@ class ZenReaderApp {
         this.currentBook = book;
         this.saveState({ lastBookId: book.filename });
         this.els.documentTitle.textContent = book.filename;
-        
+
         if (book.content) {
             this.parseTOC(book.content);
         }
@@ -375,7 +388,7 @@ class ZenReaderApp {
         const tocRegex = /^\s*(第[零一二三四五六七八九十百千萬0-9０-９]+[章回節卷]|Chapter\s*[0-9]+|正文|楔子|前言|番外)/i;
         const lines = text.split('\n');
         let charIndex = 0;
-        
+
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             if (line.length < 50 && tocRegex.test(line)) {
@@ -401,7 +414,7 @@ class ZenReaderApp {
             this.els.tocList.appendChild(emptyEl);
             return;
         }
-        
+
         this.toc.forEach(chapter => {
             const el = document.createElement('div');
             el.className = 'toc-item';
@@ -426,7 +439,7 @@ class ZenReaderApp {
         const currentPercent = this.readingPanel.maxScroll > 0 ? this.readingPanel.scrollOffset / this.readingPanel.maxScroll : 0;
         const bufferPixels = (this.currentFontSize || 18) * (this.currentLineHeight || 1.8) * 2;
         const percentBuffer = this.readingPanel.maxScroll > 0 ? bufferPixels / this.readingPanel.maxScroll : 0;
-        
+
         let currentChapter = this.toc[0].title;
         for (let i = this.toc.length - 1; i >= 0; i--) {
             if (currentPercent >= this.toc[i].percent - percentBuffer) {
@@ -434,11 +447,11 @@ class ZenReaderApp {
                 break;
             }
         }
-        
+
         if (this.els.currentChapterDisplay) {
             this.els.currentChapterDisplay.textContent = currentChapter;
         }
-        
+
         if (this.els.sliderTooltip && !this.els.sliderTooltip.classList.contains('hidden')) {
             this.els.sliderTooltip.textContent = currentChapter;
         }
@@ -515,7 +528,7 @@ class ZenReaderApp {
 
         container.classList.remove('hidden');
         grid.innerHTML = '';
-        
+
         // Load progress from localStorage
         const savedState = localStorage.getItem('zen_reader_state');
         const state = savedState ? JSON.parse(savedState) : {};
@@ -528,7 +541,7 @@ class ZenReaderApp {
 
             const date = new Date(meta.lastModified);
             const dateString = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-            
+
             const bookProgressData = positions[meta.name];
             const progressPercent = bookProgressData ? Math.round((bookProgressData.progress || 0) * 100) : 0;
 
@@ -607,7 +620,7 @@ class ZenReaderApp {
         } else if (status === 'error') {
             el.classList.add('error');
             timeEl.textContent = new Date().toLocaleTimeString();
-            
+
             if (message === 'Auth failed') {
                 msgEl.textContent = '憑證過期，點此重新授權';
                 el.style.cursor = 'pointer';
@@ -655,7 +668,7 @@ class ZenReaderApp {
             btnGDrive.style.opacity = hasAuth ? '1' : '0.5';
             btnGDrive.style.pointerEvents = hasAuth ? 'auto' : 'none';
         }
-        
+
         if (this.settings) {
             if (this.settings.btnSyncQr) {
                 this.settings.btnSyncQr.disabled = !hasAuth;
@@ -988,20 +1001,20 @@ class ZenReaderApp {
         });
 
         this.els.fileInput.addEventListener('change', (e) => { if (e.target.files.length) this.handleFile(e.target.files[0]); });
-        this.els.progressSlider.addEventListener('input', (e) => { 
-            this.els.pageIndicator.textContent = `${parseFloat(e.target.value).toFixed(3)}%`; 
-            
+        this.els.progressSlider.addEventListener('input', (e) => {
+            this.els.pageIndicator.textContent = `${parseFloat(e.target.value).toFixed(3)}%`;
+
             // Show tooltip
             if (this.els.sliderTooltip && this.toc && this.toc.length > 0) {
                 this.els.sliderTooltip.classList.remove('hidden');
                 const val = e.target.value;
-                
+
                 // Find chapter for this percent
                 let currentChapter = this.toc[0].title;
                 const currentDecimal = val / 100;
                 const bufferPixels = (this.currentFontSize || 18) * (this.currentLineHeight || 1.8) * 2;
                 const percentBuffer = this.readingPanel.maxScroll > 0 ? bufferPixels / this.readingPanel.maxScroll : 0;
-                
+
                 for (let i = this.toc.length - 1; i >= 0; i--) {
                     if (currentDecimal >= this.toc[i].percent - percentBuffer) {
                         currentChapter = this.toc[i].title;
@@ -1011,7 +1024,7 @@ class ZenReaderApp {
                 this.els.sliderTooltip.textContent = currentChapter;
             }
         });
-        
+
         // Hide tooltip when interaction ends
         this.els.progressSlider.addEventListener('change', (e) => {
             if (this.els.sliderTooltip) {
@@ -1023,12 +1036,12 @@ class ZenReaderApp {
             this.saveProgress();
             this.updateCurrentChapterDisplay();
         });
-        
+
         if (this.els.btnTocToggle && this.els.tocDialog) {
             this.els.btnTocToggle.addEventListener('click', () => {
                 this.els.tocDialog.classList.toggle('hidden');
             });
-            
+
             // Close dialog when clicking outside
             document.addEventListener('click', (e) => {
                 if (!this.els.tocDialog.contains(e.target) && !this.els.btnTocToggle.contains(e.target)) {

@@ -1,7 +1,6 @@
-class ReadingPanel {
-    constructor(app, parent) {
-        this.parent = parent;
-        this.app = app;
+class ReadingPanel extends HTMLElement {
+    constructor() {
+        super();
 
         // State
         this.doc = null;
@@ -26,7 +25,7 @@ class ReadingPanel {
         const canvas = this.canvas = document.createElement('canvas');
         canvas.classList.add('reader-canvas');
         (new ResizeObserver(this.resize.bind(this))).observe(canvas);
-        this.parent.appendChild(canvas);
+        this.appendChild(canvas);
         this.ctx = this.canvas.getContext('2d');
 
         // Mouse Events
@@ -45,7 +44,7 @@ class ReadingPanel {
         // ReadingOperation Event Listener (Next / Prev / Page Actions)
         document.body.addEventListener('ReadingOperation', (e) => {
             if (e.detail && e.detail.action && typeof this[e.detail.action] === 'function') {
-                this[e.detail.action]();
+                this[e.detail.action](...(e.detail.params ?? []));
             }
         });
     }
@@ -73,32 +72,26 @@ class ReadingPanel {
     }
 
     resize() {
-        if (!this.canvas) return;
+        if (!this.canvas || !this.doc || !window._app) return;
         const rect = this.canvas.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
 
+        const app = window._app;
+        const config = {
+            width: rect.width,
+            height: rect.height,
+            fontSize: app.currentFontSize ?? 18,
+            fontFamily: app.currentFontFamily ?? 'sans-serif',
+            lineHeightRatio: app.currentLineHeight ?? 1.8,
+            margins: app.margins ?? { top: 30, bottom: 30, left: 30, right: 30 },
+            writingMode: app.currentWritingMode ?? 'horizontal',
+            wordSpacing: app.currentWordSpacing ?? 1
+        };
+
         if (!this.engine) {
-            this.engine = new window.TextRenderEngine({
-                width: rect.width,
-                height: rect.height,
-                fontSize: this.app.currentFontSize ?? 18,
-                fontFamily: this.app.currentFontFamily ?? 'sans-serif',
-                lineHeightRatio: this.app.currentLineHeight ?? 1.8,
-                margins: this.app.margins ?? { top: 30, bottom: 30, left: 30, right: 30 },
-                writingMode: this.app.currentWritingMode ?? 'horizontal',
-                wordSpacing: this.app.currentWordSpacing ?? 1
-            });
+            this.engine = new window.TextRenderEngine(config);
         } else {
-            this.engine.updateConfig({
-                width: rect.width,
-                height: rect.height,
-                fontSize: this.app.currentFontSize,
-                fontFamily: this.app.currentFontFamily,
-                lineHeightRatio: this.app.currentLineHeight,
-                margins: this.app.margins,
-                writingMode: this.app.currentWritingMode,
-                wordSpacing: this.app.currentWordSpacing
-            });
+            this.engine.updateConfig(config);
         }
 
         this.engine.updateSize(this.canvas);
@@ -349,7 +342,7 @@ class ReadingPanel {
     }
 
     handleClick(e) {
-        if (!this.doc) return;
+        if (!this.doc || !window._app) return;
         if (this.hasMovedPastGap) {
             this.hasMovedPastGap = false;
             return;
@@ -362,9 +355,11 @@ class ReadingPanel {
         const isMiddleX = x > rect.width * 0.3 && x < rect.width * 0.7;
         const isMiddleY = y > rect.height * 0.3 && y < rect.height * 0.7;
 
+        const app = window._app;
+
         if (isMiddleX && isMiddleY) {
-            if (this.app && typeof this.app.toggleUI === 'function') {
-                this.app.toggleUI();
+            if (app && typeof app.toggleUI === 'function') {
+                app.toggleUI();
             }
             return;
         }
@@ -373,10 +368,10 @@ class ReadingPanel {
         const hh = rect.height / 2;
         let action = 'none';
 
-        if (x < hw && y < hh) action = this.app.quadTL || 'prev';
-        else if (x >= hw && y < hh) action = this.app.quadTR || 'next';
-        else if (x < hw && y >= hh) action = this.app.quadBL || 'prev';
-        else action = this.app.quadBR || 'next';
+        if (x < hw && y < hh) action = app.quadTL || 'prev';
+        else if (x >= hw && y < hh) action = app.quadTR || 'next';
+        else if (x < hw && y >= hh) action = app.quadBL || 'prev';
+        else action = app.quadBR || 'next';
 
         this.executeAction(action);
     }
@@ -417,3 +412,4 @@ class ReadingPanel {
 }
 
 window.ReadingPanel = ReadingPanel;
+customElements.define('reading-panel', ReadingPanel);
