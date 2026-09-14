@@ -80,12 +80,12 @@ class ReadingPanel extends HTMLElement {
         const config = {
             width: rect.width,
             height: rect.height,
-            fontSize: app.currentFontSize ?? 18,
-            fontFamily: app.currentFontFamily ?? 'sans-serif',
-            lineHeightRatio: app.currentLineHeight ?? 1.8,
+            fontSize: app.fontSize ?? 18,
+            fontFamily: app.fontFamily ?? 'sans-serif',
+            lineHeightRatio: app.lineHeight ?? 1.8,
             margins: app.margins ?? { top: 30, bottom: 30, left: 30, right: 30 },
-            writingMode: app.currentWritingMode ?? 'horizontal',
-            wordSpacing: app.currentWordSpacing ?? 1
+            writingMode: app.writingMode ?? 'horizontal',
+            wordSpacing: app.wordSpacing ?? 1
         };
 
         if (!this.engine) {

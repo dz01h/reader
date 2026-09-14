@@ -1,4 +1,7 @@
 class ZenReaderApp {
+
+    static STATE_KEY = 'reader_status';
+
     constructor() {
         window._app = this;
 
@@ -9,10 +12,10 @@ class ZenReaderApp {
         // State (enumerable configuration fields saved to / restored from localStorage)
         this.theme = 'dark';
         this.lang = 'zh-TW';
-        this.currentFontSize = 18;
-        this.currentWritingMode = 'vertical';
-        this.currentFontFamily = 'sans-serif';
-        this.currentLineHeight = 2.0;
+        this.fontSize = 18;
+        this.writingMode = 'vertical';
+        this.fontFamily = 'sans-serif';
+        this.lineHeight = 1.8;
         this.margins = { top: 30, bottom: 30, left: 30, right: 30 };
         this.lastBookId = null;
         this.ttsSpeed = 1.0;
@@ -28,7 +31,7 @@ class ZenReaderApp {
         this.syncCooldown = 15; // default 15 minutes
         this.lastSyncTime = 0;
 
-        this.STATE_KEY = 'zen_reader_state';
+        // this.STATE_KEY = 'zen_reader_state';
         this.currentBook = null;
 
         /*
@@ -157,23 +160,17 @@ class ZenReaderApp {
         if (savedState) {
             try {
                 const state = JSON.parse(savedState);
-                // Backward compatibility for legacy state keys
-                if (state.fontSize && !state.currentFontSize) state.currentFontSize = state.fontSize;
-                if (state.writingMode && !state.currentWritingMode) state.currentWritingMode = state.writingMode;
-                if (state.fontFamily && !state.currentFontFamily) state.currentFontFamily = state.fontFamily;
-                if (state.lineHeight && !state.currentLineHeight) state.currentLineHeight = state.lineHeight;
-
                 Object.assign(this, state);
             } catch (e) {
                 console.error("Local storage error:", e);
             }
-        } else {
-            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-            this.theme = prefersDark ? 'dark' : 'light';
         }
+    }
 
+
+    async applyState() {
         document.documentElement.setAttribute('data-theme', this.theme || 'dark');
-        document.documentElement.setAttribute('data-writing-mode', this.currentWritingMode || 'horizontal');
+        document.documentElement.setAttribute('data-writing-mode', this.writingMode || 'horizontal');
 
         if (this.i18n && this.lang) {
             this.i18n.setLanguage(this.lang);
@@ -224,22 +221,8 @@ class ZenReaderApp {
             Object.assign(this, updates);
         }
 
-        const state = {};
-        for (const [key, value] of Object.entries(this)) {
-            if (key === 'STATE_KEY' || key === 'els' || key === 'currentBook' || key.startsWith('_') || key.startsWith('$')) {
-                continue;
-            }
-            if (typeof value === 'function') continue;
-            if (value && typeof value === 'object') {
-                if (value instanceof HTMLElement || value.nodeType || (value.constructor && value.constructor.name !== 'Object' && !Array.isArray(value))) {
-                    continue;
-                }
-            }
-            state[key] = value;
-        }
-
         try {
-            localStorage.setItem(this.STATE_KEY, JSON.stringify(state));
+            localStorage.setItem(ZenReaderApp.STATE_KEY, JSON.stringify(this));
         } catch (e) {
             console.error("Save state error:", e);
         }
@@ -264,11 +247,11 @@ class ZenReaderApp {
 
         const { drawOps, maxScroll } = this.engine.layoutDocument(
             this.currentBook.content,
-            this.currentFontSize,
-            this.currentWritingMode,
+            this.fontSize,
+            this.writingMode,
             cw, ch,
-            this.currentLineHeight,
-            this.currentFontFamily,
+            this.lineHeight,
+            this.fontFamily,
             this.margins
         );
 
@@ -304,7 +287,7 @@ class ZenReaderApp {
             const op = ops[ans];
             if (op) {
                 let offset = 0;
-                if (this.currentWritingMode === 'vertical') {
+                if (this.writingMode === 'vertical') {
                     offset = startX - op.x;
                 } else {
                     offset = op.y - startY;
@@ -417,7 +400,7 @@ class ZenReaderApp {
         }
 
         const currentPercent = this.readingPanel.maxScroll > 0 ? this.readingPanel.scrollOffset / this.readingPanel.maxScroll : 0;
-        const bufferPixels = (this.currentFontSize || 18) * (this.currentLineHeight || 1.8) * 2;
+        const bufferPixels = (this.fontSize || 18) * (this.lineHeight || 1.8) * 2;
         const percentBuffer = this.readingPanel.maxScroll > 0 ? bufferPixels / this.readingPanel.maxScroll : 0;
 
         let currentChapter = this.toc[0].title;
@@ -826,23 +809,23 @@ class ZenReaderApp {
         this.saveState();
     }
     setWritingMode(mode) {
-        this.currentWritingMode = mode;
+        this.writingMode = mode;
         document.documentElement.setAttribute('data-writing-mode', mode);
         this.saveState();
         this.applyLayoutChange();
     }
     setFontSize(size) {
-        this.currentFontSize = size;
+        this.fontSize = size;
         this.saveState();
         this.applyLayoutChange();
     }
     setFontFamily(family) {
-        this.currentFontFamily = family;
+        this.fontFamily = family;
         this.saveState();
         this.applyLayoutChange();
     }
     setLineHeight(ratio) {
-        this.currentLineHeight = ratio;
+        this.lineHeight = ratio;
         this.saveState();
         this.applyLayoutChange();
     }
@@ -992,7 +975,7 @@ class ZenReaderApp {
                 // Find chapter for this percent
                 let currentChapter = this.toc[0].title;
                 const currentDecimal = val / 100;
-                const bufferPixels = (this.currentFontSize || 18) * (this.currentLineHeight || 1.8) * 2;
+                const bufferPixels = (this.fontSize || 18) * (this.lineHeight || 1.8) * 2;
                 const percentBuffer = this.readingPanel.maxScroll > 0 ? bufferPixels / this.readingPanel.maxScroll : 0;
 
                 for (let i = this.toc.length - 1; i >= 0; i--) {

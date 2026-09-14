@@ -85,47 +85,36 @@
     <dialog id="settings-dialog" class="settings-dialog">
         <setting-panel>
         {
-            "langSelect": {
-                "type": "select",
-                "label": "介面語言",
-                "labelKey": "settingLanguage",
-                "binding": "lang",
-                "options": {
+            "lang": {
+                "label": "$settingLanguage",
+                "select": {
                     "zh-TW": "繁體中文 (Taiwan)",
                     "zh-CN": "简体中文 (China)",
                     "en-US": "English (US)",
                     "ja-JP": "日本語 (Japan)"
                 }
             },
-            "themeSelect": {
-                "type": "select",
-                "label": "主題色彩",
-                "labelKey": "settingTheme",
+            "theme": {
+                "label": "$settingTheme",
                 "binding": "theme",
-                "options": {
-                    "light": "淺色風格",
-                    "dark": "深色風格"
+                "select": {
+                    "light": "$themeLight",
+                    "dark": "$themeDark"
                 }
             },
-            "directionSelect": {
-                "type": "select",
-                "label": "閱讀方向",
-                "labelKey": "settingDirection",
-                "binding": "direction",
-                "options": {
-                    "horizontal": "橫書",
-                    "vertical": "直書"
+            "writingMode": {
+                "label": "$settingDirection",
+                "select": {
+                    "horizontal": "$dirHorizontal",
+                    "vertical": "$dirVertical"
                 }
             },
-            "fontFamilySelect": {
-                "type": "select",
-                "label": "字體風格",
-                "labelKey": "settingFontFamily",
-                "binding": "fontFamily",
-                "options": {
-                    "sans-serif": "無襯線體 (預設黑體)",
-                    "serif": "襯線體 (明體/宋體)",
-                    "monospace": "等寬字體"
+            "fontFamily": {
+                "label": "$settingFontFamily",
+                "select": {
+                    "sans-serif": "$fontSans",
+                    "serif": "$fontSerif",
+                    "monospace": "$fontMono"
                 },
                 "extraButton": {
                     "id": "btn-load-local-fonts",
@@ -134,61 +123,50 @@
                 }
             },
             "fontSize": {
-                "type": "slider",
-                "label": "字體大小",
-                "labelKey": "settingFontSize",
-                "binding": "fontSize",
-                "min": 12,
-                "max": 48,
-                "step": 2,
-                "unit": "px"
+                "label": "$settingFontSize",
+                "range-slider": {
+                    "min": 12,
+                    "max": 48,
+                    "step": 2,
+                    "unit": "px"
+                }
             },
             "lineHeight": {
-                "type": "slider",
-                "label": "行距",
-                "labelKey": "settingLineHeight",
-                "binding": "lineHeight",
-                "min": 1.0,
-                "max": 3.0,
-                "step": 0.1
+                "label": "%settingLineHeight",
+                "range-slider": {
+                    "min": 1.0,
+                    "max": 3.0,
+                    "step": 0.1
+                }
             },
             "margins": {
-                "type": "fieldset",
-                "legend": "邊距設定 (Pixels)",
-                "legendKey": "settingMarginsGroup",
-                "fields": {
-                    "marginTop": { "type": "slider", "label": "上", "labelKey": "settingMarginTop", "binding": "margins.top", "min": 0, "max": 150, "step": 1 },
-                    "marginBottom": { "type": "slider", "label": "下", "labelKey": "settingMarginBottom", "binding": "margins.bottom", "min": 0, "max": 150, "step": 1 },
-                    "marginLeft": { "type": "slider", "label": "左", "labelKey": "settingMarginLeft", "binding": "margins.left", "min": 0, "max": 150, "step": 1 },
-                    "marginRight": { "type": "slider", "label": "右", "labelKey": "settingMarginRight", "binding": "margins.right", "min": 0, "max": 150, "step": 1 }
+                "legend": "$settingMargins",
+                "fieldset": {
+                    "margins.top": { "label": "⬆️", "range-slider": { "min": 0, "max": 150, "step": 1 } },
+                    "margins.bottom": { "label": "⬇️", "range-slider": { "min": 0, "max": 150, "step": 1 } },
+                    "margins.left": { "label": "⬅️", "range-slider": { "min": 0, "max": 150, "step": 1 } },
+                    "margins.right": { "label": "➡️", "range-slider": { "min": 0, "max": 150, "step": 1 } }
                 }
             },
             "quadrants": {
-                "type": "fieldset",
-                "legend": "點擊四象限 (隱形換頁按鈕)",
-                "legendKey": "settingQuadrants",
-                "layout": "row",
-                "fields": {
-                    "quadTL": { "type": "select", "label": "左上角", "labelKey": "quadTL", "binding": "quadTL", "options": { "prev": "上一頁", "next": "下一頁", "none": "無功能" } },
-                    "quadTR": { "type": "select", "label": "右上角", "labelKey": "quadTR", "binding": "quadTR", "options": { "prev": "上一頁", "next": "下一頁", "none": "無功能" } },
-                    "quadBL": { "type": "select", "label": "左下角", "labelKey": "quadBL", "binding": "quadBL", "options": { "prev": "上一頁", "next": "下一頁", "none": "無功能" } },
-                    "quadBR": { "type": "select", "label": "右下角", "labelKey": "quadBR", "binding": "quadBR", "options": { "prev": "上一頁", "next": "下一頁", "none": "無功能" } }
+                "legend": "$settingQuadrants",
+                "fieldset": {
+                    "quadTL": { "label": "↖️", "select": { "prev": "$actionPrev", "next": "$actionNext", "none": "$actionNone" } },
+                    "quadTR": { "label": "↗️", "select": { "prev": "$actionPrev", "next": "$actionNext", "none": "$actionNone" } },
+                    "quadBL": { "label": "↙️", "select": { "prev": "$actionPrev", "next": "$actionNext", "none": "$actionNone" } },
+                    "quadBR": { "label": "↘️", "select": { "prev": "$actionPrev", "next": "$actionNext", "none": "$actionNone" } }
                 }
             },
             "tts": {
-                "type": "fieldset",
-                "legend": "TTS 語音設定",
-                "legendKey": "settingTTSGroup",
-                "fields": {
-                    "ttsModel": { "type": "ttsModelSelect", "label": "語音引擎與模型", "labelKey": "settingTTSModel" },
-                    "ttsSpeed": { "type": "slider", "label": "語音速度", "labelKey": "settingTTSSpeed", "binding": "ttsSpeed", "min": 0.5, "max": 2.0, "step": 0.1 }
+                "legend": "$settingTTS",
+                "fieldset": {
+                    "ttsModel": { "label": "$settingTTSModel", "ttsModelSelect": {} },
+                    "ttsSpeed": { "label": "$settingTTSSpeed", "range-slider": { "min": 0.5, "max": 2.0, "step": 0.1 } }
                 }
             },
             "advanced": {
-                "type": "fieldset",
-                "legend": "進階整合",
-                "legendKey": "settingAdvanced",
-                "fields": {
+                "legend": "$settingAdvanced",
+                "fieldset": {
                     "syncCooldown": {
                         "type": "select",
                         "label": "同步冷卻時間",

@@ -12,7 +12,7 @@ const translations = {
         toastReady: '離線模式已就緒',
         toastOnline: '已恢復網路連線',
         toastOffline: '目前處於離線模式',
-        
+
         settingsTitle: '閱讀設定',
         settingLanguage: '介面語言',
         settingTheme: '主題色彩',
@@ -27,8 +27,11 @@ const translations = {
         fontMono: '等寬字體',
         settingFontSize: '字體大小: ',
         settingLineHeight: '行距: ',
+        settingMargins: "邊距設定 (Pixels)",
+        settingTTS: "TTS 語音設定",
         settingTTSModel: '語音引擎與模型',
-        
+        settingTTSSpeed: "語音速度",
+
         settingQuadrants: '點擊四象限 (隱形換頁按鈕)',
         quadTL: '左上角',
         quadTR: '右上角',
@@ -37,7 +40,7 @@ const translations = {
         actionPrev: '上一頁',
         actionNext: '下一頁',
         actionNone: '無功能',
-        
+
         settingAdvanced: '進階整合',
         settingSyncCooldown: '同步冷卻時間',
         btnSyncQr: '產生同步 QR Code',
@@ -66,7 +69,7 @@ const translations = {
         toastReady: '离线模式已就绪',
         toastOnline: '已恢复网络连接',
         toastOffline: '目前处于离线模式',
-        
+
         settingsTitle: '阅读设置',
         settingLanguage: '界面语言',
         settingTheme: '主题色彩',
@@ -82,7 +85,7 @@ const translations = {
         settingFontSize: '字体大小: ',
         settingLineHeight: '行距: ',
         settingTTSModel: '语音引擎与模型',
-        
+
         settingQuadrants: '点击四象限 (隐形换页按钮)',
         quadTL: '左上角',
         quadTR: '右上角',
@@ -91,7 +94,7 @@ const translations = {
         actionPrev: '上一页',
         actionNext: '下一页',
         actionNone: '无功能',
-        
+
         settingAdvanced: '进阶整合',
         settingSyncCooldown: '同步冷却时间',
         btnSyncQr: '产生同步 QR Code',
@@ -120,7 +123,7 @@ const translations = {
         toastReady: 'Offline mode is ready',
         toastOnline: 'Network connection restored',
         toastOffline: 'Currently in offline mode',
-        
+
         settingsTitle: 'Reading Settings',
         settingLanguage: 'Language',
         settingTheme: 'Theme',
@@ -136,7 +139,7 @@ const translations = {
         settingFontSize: 'Font Size: ',
         settingLineHeight: 'Line Height: ',
         settingTTSModel: 'TTS Engine & Model',
-        
+
         settingQuadrants: 'Tap Quadrants (Invisible page turners)',
         quadTL: 'Top Left',
         quadTR: 'Top Right',
@@ -145,7 +148,7 @@ const translations = {
         actionPrev: 'Previous Page',
         actionNext: 'Next Page',
         actionNone: 'None',
-        
+
         settingAdvanced: 'Advanced Integrations',
         settingSyncCooldown: 'Sync Cooldown',
         btnSyncQr: 'Generate Sync QR Code',
@@ -174,7 +177,7 @@ const translations = {
         toastReady: 'オフラインモード準備完了',
         toastOnline: 'ネットワーク接続が復旧しました',
         toastOffline: '現在オフラインモードです',
-        
+
         settingsTitle: '読書設定',
         settingLanguage: '言語',
         settingTheme: 'テーマ',
@@ -190,7 +193,7 @@ const translations = {
         settingFontSize: 'フォントサイズ: ',
         settingLineHeight: '行間: ',
         settingTTSModel: '音声エンジンと言語モデル',
-        
+
         settingQuadrants: 'タップ領域 (ページめくり)',
         quadTL: '左上',
         quadTR: '右上',
@@ -199,7 +202,7 @@ const translations = {
         actionPrev: '前のページ',
         actionNext: '次のページ',
         actionNone: 'なし',
-        
+
         settingAdvanced: '高度な統合',
         settingSyncCooldown: '同期冷却時間',
         btnSyncQr: '同期用 QR コードを作成',
@@ -236,11 +239,11 @@ class I18nManager {
     t(key, ...args) {
         const dict = translations[this.lang] || translations['zh-TW'];
         let text = dict[key] || translations['zh-TW'][key] || key;
-        
+
         args.forEach((arg, index) => {
             text = text.replace(`{${index}}`, arg);
         });
-        
+
         return text;
     }
 
