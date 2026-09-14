@@ -632,6 +632,15 @@ select, input[type="text"] {
     direction: rtl;
 }
 
+#progress-slider::before {
+    top: calc(100% + 0.5rem);
+    left: auto;
+    right: 0;
+    transform: none;
+    font-size: 15px;
+    line-height: 32px;
+}
+
 #page-indicator {
     font-size: 0.85rem;
     color: var(--color-text-muted);

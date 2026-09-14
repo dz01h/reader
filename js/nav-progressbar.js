@@ -66,7 +66,12 @@ class NavProgressBar extends HTMLElement {
         document.body.addEventListener('ReadingPanelRenderOver', e => {
             if (this.isDragging) return;
             this.progress = e.detail && typeof e.detail.progress === 'number' ? e.detail.progress : 0;
-            this.cursor.style.display = 'block';
+
+            if(this.cursor.style.display !== 'block') {
+                this.cursor.style.display = 'block';
+                this.updateCursorPosition(this.progress);
+            }
+            
             this.render();
         });
 

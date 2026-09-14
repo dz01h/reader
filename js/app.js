@@ -6,13 +6,15 @@ class ZenReaderApp {
         window.addEventListener('error', (e) => this.logError(`${e.message} at ${e.filename}:${e.lineno}`));
         window.addEventListener('unhandledrejection', (e) => this.logError(`Unhandled Rejection: ${e.reason}`));
 
-        // State
+        // State (enumerable configuration fields saved to / restored from localStorage)
+        this.theme = 'dark';
+        this.lang = 'zh-TW';
         this.currentFontSize = 18;
         this.currentWritingMode = 'vertical';
         this.currentFontFamily = 'sans-serif';
         this.currentLineHeight = 2.0;
         this.margins = { top: 30, bottom: 30, left: 30, right: 30 };
-        this.currentBook = null;
+        this.lastBookId = null;
         this.ttsSpeed = 1.0;
         this.ttsVoice = 'zh_CN-huayan-medium';
         this.ttsEngine = 'piper';
@@ -23,10 +25,11 @@ class ZenReaderApp {
         this.quadBL = 'prev';
         this.quadBR = 'next';
 
-        this.STATE_KEY = 'zen_reader_state';
-
         this.syncCooldown = 15; // default 15 minutes
         this.lastSyncTime = 0;
+
+        this.STATE_KEY = 'zen_reader_state';
+        this.currentBook = null;
 
         /*
         const main = document.querySelector('#main-content');
@@ -154,90 +157,50 @@ class ZenReaderApp {
         if (savedState) {
             try {
                 const state = JSON.parse(savedState);
-                if (state.theme) {
-                    document.documentElement.setAttribute('data-theme', state.theme);
-                } else {
-                    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                    document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
-                }
+                // Backward compatibility for legacy state keys
+                if (state.fontSize && !state.currentFontSize) state.currentFontSize = state.fontSize;
+                if (state.writingMode && !state.currentWritingMode) state.currentWritingMode = state.writingMode;
+                if (state.fontFamily && !state.currentFontFamily) state.currentFontFamily = state.fontFamily;
+                if (state.lineHeight && !state.currentLineHeight) state.currentLineHeight = state.lineHeight;
 
-                if (state.fontSize) this.currentFontSize = state.fontSize;
-                if (state.writingMode) {
-                    this.currentWritingMode = state.writingMode;
-                    document.documentElement.setAttribute('data-writing-mode', this.currentWritingMode);
-                }
-                if (state.fontFamily) this.currentFontFamily = state.fontFamily;
-                if (state.lineHeight) this.currentLineHeight = state.lineHeight;
-                if (state.margins) {
-                    this.margins = state.margins;
-                }
-                if (state.syncCooldown) this.syncCooldown = state.syncCooldown;
-                if (state.ttsSpeed) {
-                    this.ttsSpeed = state.ttsSpeed;
-                }
-                if (state.ttsEngine) this.ttsEngine = state.ttsEngine;
-                if (state.ttsVoice) this.ttsVoice = state.ttsVoice;
-
-                // Validate loaded voice to prevent worker crash loop from invalid/deprecated values
-                if (this.ttsEngine === 'piper') {
-                    const validPiper = ['zh_CN-huayan-medium', 'zh_CN-huayan-x_low'];
-                    if (!validPiper.includes(this.ttsVoice)) {
-                        this.ttsVoice = 'zh_CN-huayan-medium';
-                    }
-                } else if (this.ttsEngine === 'kokoro') {
-                    // v1.0 model voices (English only)
-                    const validKokoro = [
-                        'af_heart', 'af_bella', 'af_sarah', 'af_sky',
-                        'af_alloy', 'af_aoede', 'af_jessica', 'af_kore', 'af_nicole', 'af_nova', 'af_river',
-                        'am_adam', 'am_michael', 'am_echo', 'am_eric', 'am_fenrir', 'am_liam', 'am_onyx', 'am_puck', 'am_santa',
-                        'bf_emma', 'bf_isabella', 'bf_alice', 'bf_lily',
-                        'bm_george', 'bm_lewis', 'bm_daniel', 'bm_fable'
-                    ];
-                    if (!validKokoro.includes(this.ttsVoice)) {
-                        this.ttsVoice = 'af_heart';
-                    }
-                }
-
-                if (this.ttsEngine && this.tts) {
-                    this.tts.switchEngine(this.ttsEngine);
-                }
-
-                if (state.quadTL) this.quadTL = state.quadTL;
-                if (state.quadTR) this.quadTR = state.quadTR;
-                if (state.quadBL) this.quadBL = state.quadBL;
-                if (state.quadBR) this.quadBR = state.quadBR;
-
-                if (state.lang && this.i18n) {
-                    this.i18n.setLanguage(state.lang);
-                } else if (this.i18n) {
-                    this.i18n.updateDOM();
-                }
-
-                if (state.lastBookId) this.lastBookId = state.lastBookId;
+                Object.assign(this, state);
             } catch (e) {
                 console.error("Local storage error:", e);
             }
         } else {
-            const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-            document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+            const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            this.theme = prefersDark ? 'dark' : 'light';
+        }
+
+        document.documentElement.setAttribute('data-theme', this.theme || 'dark');
+        document.documentElement.setAttribute('data-writing-mode', this.currentWritingMode || 'horizontal');
+
+        if (this.i18n && this.lang) {
+            this.i18n.setLanguage(this.lang);
+        } else if (this.i18n) {
+            this.i18n.updateDOM();
+        }
+
+        if (this.ttsEngine && this.tts) {
+            this.tts.switchEngine(this.ttsEngine);
         }
 
         let book = null;
-        if (this.lastBookId) {
+        if (this.lastBookId && window.ZenOPFS) {
             const text = await window.ZenOPFS.loadFile(this.lastBookId);
-            if (text) {
+            if (text && window.ZenBook) {
                 book = new window.ZenBook(this.lastBookId, text);
                 book.loadProgress();
             }
         }
 
         // Fallback: If no lastBookId but there is a recent book, pick the most recent one
-        if (!book) {
+        if (!book && window.ZenOPFS) {
             const opfsFiles = await window.ZenOPFS.listFiles();
             if (opfsFiles && opfsFiles.length > 0) {
                 const recentFile = opfsFiles[0].name;
                 const text = await window.ZenOPFS.loadFile(recentFile);
-                if (text) {
+                if (text && window.ZenBook) {
                     this.lastBookId = recentFile;
                     book = new window.ZenBook(recentFile, text);
                     book.loadProgress();
@@ -247,22 +210,39 @@ class ZenReaderApp {
 
         if (book) {
             this.loadBookIntoReader(book);
-            this.showToast(`已回復上次閱讀的書籍`);
-        } else {
+            this.showToast('已恢復上次閱讀的書籍');
+        } else if (typeof this.closeReader === 'function') {
             this.closeReader();
         }
 
-        this.updateThemeColor();
-        this.updateGoogleUIState();
+        if (typeof this.updateThemeColor === 'function') this.updateThemeColor();
+        if (typeof this.updateGoogleUIState === 'function') this.updateGoogleUIState();
     }
 
     saveState(updates) {
-        const savedState = localStorage.getItem(this.STATE_KEY);
-        let state = savedState ? JSON.parse(savedState) : {};
-        state = { ...state, ...updates };
+        if (updates && typeof updates === 'object') {
+            Object.assign(this, updates);
+        }
+
+        const state = {};
+        for (const [key, value] of Object.entries(this)) {
+            if (key === 'STATE_KEY' || key === 'els' || key === 'currentBook' || key.startsWith('_') || key.startsWith('$')) {
+                continue;
+            }
+            if (typeof value === 'function') continue;
+            if (value && typeof value === 'object') {
+                if (value instanceof HTMLElement || value.nodeType || (value.constructor && value.constructor.name !== 'Object' && !Array.isArray(value))) {
+                    continue;
+                }
+            }
+            state[key] = value;
+        }
+
         try {
             localStorage.setItem(this.STATE_KEY, JSON.stringify(state));
-        } catch (e) { }
+        } catch (e) {
+            console.error("Save state error:", e);
+        }
     }
 
     saveProgress() {
@@ -458,6 +438,7 @@ class ZenReaderApp {
     }
 
     async closeReader(isFromHistory = false) {
+        if (!this.els) return;
         if (this.tts) this.tts.stop();
         document.body.classList.remove('reading-mode');
         document.body.classList.remove('ui-hidden');
@@ -839,55 +820,58 @@ class ZenReaderApp {
 
     // Setters
     setTheme(newTheme) {
+        this.theme = newTheme;
         document.documentElement.setAttribute('data-theme', newTheme);
-        this.updateThemeColor();
-        this.saveState({ theme: newTheme });
+        if (typeof this.updateThemeColor === 'function') this.updateThemeColor();
+        this.saveState();
     }
     setWritingMode(mode) {
         this.currentWritingMode = mode;
         document.documentElement.setAttribute('data-writing-mode', mode);
-        this.saveState({ writingMode: mode });
+        this.saveState();
         this.applyLayoutChange();
     }
     setFontSize(size) {
         this.currentFontSize = size;
-        this.saveState({ fontSize: size });
+        this.saveState();
         this.applyLayoutChange();
     }
     setFontFamily(family) {
         this.currentFontFamily = family;
-        this.saveState({ fontFamily: family });
+        this.saveState();
         this.applyLayoutChange();
     }
     setLineHeight(ratio) {
         this.currentLineHeight = ratio;
-        this.saveState({ lineHeight: ratio });
+        this.saveState();
         this.applyLayoutChange();
     }
     setMargins(updates) {
         this.margins = { ...this.margins, ...updates };
-        this.saveState({ margins: this.margins });
+        this.saveState();
         this.applyLayoutChange();
     }
     setSyncCooldown(minutes) {
         this.syncCooldown = parseInt(minutes);
-        this.saveState({ syncCooldown: this.syncCooldown });
+        this.saveState();
         if (this.readingLog) {
             this.readingLog.setCooldown(this.syncCooldown);
         }
     }
     setLanguage(langCode) {
-        if (this.i18n && this.i18n.setLanguage(langCode)) this.saveState({ lang: langCode });
+        this.lang = langCode;
+        if (this.i18n) this.i18n.setLanguage(langCode);
+        this.saveState();
     }
 
     setTTSSpeed(val) {
         this.ttsSpeed = parseFloat(val);
-        this.saveState({ ttsSpeed: this.ttsSpeed });
+        this.saveState();
     }
 
     setTTSEngine(val) {
         this.ttsEngine = val;
-        this.saveState({ ttsEngine: this.ttsEngine });
+        this.saveState();
         if (this.tts) {
             this.tts.switchEngine(val);
         }
@@ -895,9 +879,7 @@ class ZenReaderApp {
 
     setTTSVoice(val) {
         this.ttsVoice = val;
-        this.saveState({ ttsVoice: this.ttsVoice });
-        // Optional: WebSpeech API might be able to change voices dynamically, but
-        // restart ensures it picks up correctly.
+        this.saveState();
         if (this.tts && this.tts.isPlaying) {
             this.tts.stop();
             this.tts.start();
@@ -908,7 +890,7 @@ class ZenReaderApp {
         const engineChanged = this.ttsEngine !== engine;
         this.ttsEngine = engine;
         this.ttsVoice = voice;
-        this.saveState({ ttsEngine: engine, ttsVoice: voice });
+        this.saveState();
 
         if (engineChanged && this.tts) {
             this.tts.switchEngine(engine);
@@ -920,9 +902,7 @@ class ZenReaderApp {
 
     setQuad(quad, action) {
         this[`quad${quad}`] = action;
-        const update = {};
-        update[`quad${quad}`] = action;
-        this.saveState(update);
+        this.saveState();
     }
 
     bindEvents() {
@@ -1081,4 +1061,5 @@ class ZenReaderApp {
     }
 }
 
+window.ZenReaderApp = ZenReaderApp;
 document.addEventListener('DOMContentLoaded', () => { window.readerApp = new ZenReaderApp(); });

@@ -52,12 +52,11 @@
                     <nax-progressbar id="progress-slider" data-i18n="title:progressTitle" title="拖動調整閱讀進度"></nax-progressbar>
                     <div class="status-bottom">
                         <div class="info-left">
-                            <button id="btn-toc-toggle" class="icon-btn" title="章節目錄">
+                            <button id="btn-toc-toggle" class="icon-btn" title="章節清單">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
                             </button>
                         </div>
                         <div class="info-right">
-                            <span id="page-indicator">0.000%</span>
                             <div id="sync-status" class="sync-status hidden">
                                 <div class="sync-icon"></div>
                                 <div class="sync-tooltip">
@@ -74,7 +73,7 @@
             </div>
         </footer>
 
-        <div id="toast" class="toast" data-i18n="toastReady">閱讀模式已就緒</div>
+        <div id="toast" class="toast" data-i18n="toastReady">語音模組已就緒</div>
 
         <!-- TOC Dialog -->
         <div id="toc-dialog" class="toc-dialog hidden">
@@ -82,6 +81,143 @@
             <div id="toc-list" class="toc-list"></div>
         </div>
     </div>
+
+    <dialog id="settings-dialog" class="settings-dialog">
+        <setting-panel>
+        {
+            "langSelect": {
+                "type": "select",
+                "label": "介面語言",
+                "labelKey": "settingLanguage",
+                "binding": "lang",
+                "options": {
+                    "zh-TW": "繁體中文 (Taiwan)",
+                    "zh-CN": "简体中文 (China)",
+                    "en-US": "English (US)",
+                    "ja-JP": "日本語 (Japan)"
+                }
+            },
+            "themeSelect": {
+                "type": "select",
+                "label": "主題色彩",
+                "labelKey": "settingTheme",
+                "binding": "theme",
+                "options": {
+                    "light": "淺色風格",
+                    "dark": "深色風格"
+                }
+            },
+            "directionSelect": {
+                "type": "select",
+                "label": "閱讀方向",
+                "labelKey": "settingDirection",
+                "binding": "direction",
+                "options": {
+                    "horizontal": "橫書",
+                    "vertical": "直書"
+                }
+            },
+            "fontFamilySelect": {
+                "type": "select",
+                "label": "字體風格",
+                "labelKey": "settingFontFamily",
+                "binding": "fontFamily",
+                "options": {
+                    "sans-serif": "無襯線體 (預設黑體)",
+                    "serif": "襯線體 (明體/宋體)",
+                    "monospace": "等寬字體"
+                },
+                "extraButton": {
+                    "id": "btn-load-local-fonts",
+                    "text": "從本機載入更多字型...",
+                    "action": "loadLocalFonts"
+                }
+            },
+            "fontSize": {
+                "type": "slider",
+                "label": "字體大小",
+                "labelKey": "settingFontSize",
+                "binding": "fontSize",
+                "min": 12,
+                "max": 48,
+                "step": 2,
+                "unit": "px"
+            },
+            "lineHeight": {
+                "type": "slider",
+                "label": "行距",
+                "labelKey": "settingLineHeight",
+                "binding": "lineHeight",
+                "min": 1.0,
+                "max": 3.0,
+                "step": 0.1
+            },
+            "margins": {
+                "type": "fieldset",
+                "legend": "邊距設定 (Pixels)",
+                "legendKey": "settingMarginsGroup",
+                "fields": {
+                    "marginTop": { "type": "slider", "label": "上", "labelKey": "settingMarginTop", "binding": "margins.top", "min": 0, "max": 150, "step": 1 },
+                    "marginBottom": { "type": "slider", "label": "下", "labelKey": "settingMarginBottom", "binding": "margins.bottom", "min": 0, "max": 150, "step": 1 },
+                    "marginLeft": { "type": "slider", "label": "左", "labelKey": "settingMarginLeft", "binding": "margins.left", "min": 0, "max": 150, "step": 1 },
+                    "marginRight": { "type": "slider", "label": "右", "labelKey": "settingMarginRight", "binding": "margins.right", "min": 0, "max": 150, "step": 1 }
+                }
+            },
+            "quadrants": {
+                "type": "fieldset",
+                "legend": "點擊四象限 (隱形換頁按鈕)",
+                "legendKey": "settingQuadrants",
+                "layout": "row",
+                "fields": {
+                    "quadTL": { "type": "select", "label": "左上角", "labelKey": "quadTL", "binding": "quadTL", "options": { "prev": "上一頁", "next": "下一頁", "none": "無功能" } },
+                    "quadTR": { "type": "select", "label": "右上角", "labelKey": "quadTR", "binding": "quadTR", "options": { "prev": "上一頁", "next": "下一頁", "none": "無功能" } },
+                    "quadBL": { "type": "select", "label": "左下角", "labelKey": "quadBL", "binding": "quadBL", "options": { "prev": "上一頁", "next": "下一頁", "none": "無功能" } },
+                    "quadBR": { "type": "select", "label": "右下角", "labelKey": "quadBR", "binding": "quadBR", "options": { "prev": "上一頁", "next": "下一頁", "none": "無功能" } }
+                }
+            },
+            "tts": {
+                "type": "fieldset",
+                "legend": "TTS 語音設定",
+                "legendKey": "settingTTSGroup",
+                "fields": {
+                    "ttsModel": { "type": "ttsModelSelect", "label": "語音引擎與模型", "labelKey": "settingTTSModel" },
+                    "ttsSpeed": { "type": "slider", "label": "語音速度", "labelKey": "settingTTSSpeed", "binding": "ttsSpeed", "min": 0.5, "max": 2.0, "step": 0.1 }
+                }
+            },
+            "advanced": {
+                "type": "fieldset",
+                "legend": "進階整合",
+                "legendKey": "settingAdvanced",
+                "fields": {
+                    "syncCooldown": {
+                        "type": "select",
+                        "label": "同步冷卻時間",
+                        "labelKey": "settingSyncCooldown",
+                        "binding": "syncCooldown",
+                        "options": { "1": "1 min", "5": "5 min", "10": "10 min", "15": "15 min", "30": "30 min", "60": "60 min" }
+                    },
+                    "btnSyncQr": { "type": "button", "id": "btn-sync-qr", "text": "顯示同步 QR Code", "textKey": "text:btnSyncQr", "action": "generateSyncQR" },
+                    "btnGoogleLogin": { "type": "button", "id": "btn-google-login", "text": "登入 Google 帳號", "textKey": "text:btnGoogleLogin", "action": "googleLogin" },
+                    "btnOpenReadingLog": { "type": "button", "id": "btn-open-reading-log", "text": "開啟 Reading Log 編輯", "action": "openReadingLog", "style": "display: none;" },
+                    "btnShowErrorLog": { "type": "button", "id": "btn-show-error-log", "text": "系統錯誤紀錄", "action": "showErrorLog" },
+                    "btnClearCache": { "type": "button", "id": "btn-clear-cache", "text": "清除所有快取 (Clear Cache)", "action": "clearCache", "danger": true },
+                    "qrContainer": { "type": "container", "id": "qr-container", "class": "hidden", "html": "<div id=\"qr-code\"></div><p style=\"color: black; font-size: 0.8rem; margin-top: 0.5rem; font-weight: bold;\">使用手機掃描 QR Code 即可自動同步設定</p>" }
+                }
+            }
+        }
+        </setting-panel>
+    </dialog>
+
+    <dialog id="error-log-dialog" class="settings-dialog">
+        <div class="settings-header">
+            <h2 id="error-log-title">系統錯誤紀錄 (Error Log)</h2>
+            <button id="btn-close-error-log" class="icon-btn">✕</button>
+        </div>
+        <div class="settings-body">
+            <pre id="error-log-content" style="font-size: 0.8rem; background: #222; color: #f87171; padding: 1rem; overflow-x: auto; white-space: pre-wrap; height: 300px;"></pre>
+            <button id="btn-clear-error-log" class="btn-primary" style="width: 100%; margin-top: 1rem;">清除紀錄</button>
+        </div>
+    </dialog>
 
     <!-- JS Engine and logic imports -->
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
