@@ -226,48 +226,6 @@ body {
     width: 100%;
 }
 
-/* Custom Slider */
-.custom-slider {
-    position: relative;
-    width: 100%;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    touch-action: none;
-}
-.custom-slider-track {
-    position: relative;
-    width: 100%;
-    height: 6px;
-    background: var(--color-border);
-    border-radius: 3px;
-}
-.custom-slider-fill {
-    position: absolute;
-    top: 0; left: 0; bottom: 0;
-    background: var(--color-primary);
-    border-radius: 3px;
-    pointer-events: none;
-}
-.custom-slider-thumb {
-    position: absolute;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: 20px;
-    height: 20px;
-    background: var(--color-surface);
-    border: 2px solid var(--color-primary);
-    border-radius: 50%;
-    box-shadow: var(--shadow-sm);
-    pointer-events: none;
-    transition: transform 0.1s, box-shadow 0.1s;
-}
-.custom-slider.active .custom-slider-thumb {
-    transform: translate(-50%, -50%) scale(1.2);
-    box-shadow: var(--shadow-md);
-}
-
 /* Slider interacting visibility */
 body.settings-interacting .app-header,
 body.settings-interacting .status-bar {

@@ -22,6 +22,7 @@ const translations = {
         dirHorizontal: '橫書',
         dirVertical: '直書',
         settingFontFamily: '字體風格',
+        settingLoadLocalFont: "從本機載入更多字型...",
         fontSans: '無襯線體 (預設黑體)',
         fontSerif: '襯線體 (明體/宋體)',
         fontMono: '等寬字體',
@@ -44,6 +45,9 @@ const translations = {
         settingAdvanced: '進階整合',
         settingSyncCooldown: '同步冷卻時間',
         btnSyncQr: '產生同步 QR Code',
+        btnGoogleLogin: '登入 Google 帳號',
+        btnOpenReadingLog: '開啟 Reading Log 編輯',
+        clearCache: '清除所有快取 (Clear Cache)',
         btnGasAuth: '重新授權 reader gas api',
         gdriveFetchingToken: '正在取得 Google 授權令牌...',
         gdriveLoginFail: 'Google 登入或授權失敗！',
@@ -223,58 +227,36 @@ const translations = {
 class I18nManager {
     constructor() {
         this.lang = 'zh-TW'; // default
-        this.langs = ['zh-TW', 'zh-CN', 'en-US', 'ja-JP'];
+        this.langs = Object.keys(translations);
+        this.installI18n();
     }
 
     setLanguage(langCode) {
         if (translations[langCode]) {
             this.lang = langCode;
             document.documentElement.lang = langCode;
-            this.updateDOM();
             return true;
         }
         return false;
     }
 
-    t(key, ...args) {
-        const dict = translations[this.lang] || translations['zh-TW'];
-        let text = dict[key] || translations['zh-TW'][key] || key;
+    installI18n() {
+        const ts = translations ?? [];
+        const rez = [];
+        for(let lang in ts) {
+            for(let key in ts[lang]) {
+                rez.push(`:lang(${lang}) [data-i18n="${key}"]::before { content: "${ts[lang][key]}"; }`);
+            }
+        }
 
-        args.forEach((arg, index) => {
-            text = text.replace(`{${index}}`, arg);
-        });
-
-        return text;
-    }
-
-    updateDOM() {
-        // Update all elements with data-i18n attribute
-        const elements = document.querySelectorAll('[data-i18n]');
-        elements.forEach(el => {
-            const keys = el.getAttribute('data-i18n').split(';');
-            keys.forEach(keyInstruction => {
-                const parts = keyInstruction.split(':');
-                if (parts.length === 2) {
-                    const attr = parts[0];
-                    const key = parts[1];
-                    if (attr === 'text') {
-                        el.textContent = this.t(key);
-                    } else if (attr === 'placeholder') {
-                        el.placeholder = this.t(key);
-                    } else if (attr === 'title') {
-                        el.title = this.t(key);
-                    } else {
-                        el.setAttribute(attr, this.t(key));
-                    }
-                } else if (parts.length === 1) {
-                    // Default to textContent
-                    el.textContent = this.t(parts[0]);
-                }
-            });
-        });
-
-        // Trigger an event so other parts of the app can update dynamically if needed
-        window.dispatchEvent(new CustomEvent('i18n-updated'));
+        // 1. 建立一個全新的 CSSStyleSheet 物件
+        const sheet = new CSSStyleSheet();
+        
+        // 2. 同步或非同步將 CSS 內容編譯進去
+        sheet.replaceSync(rez.join('\n'));
+        
+        // 3. 直接注入到全局 document 的採用樣式表中 (它是一個陣列)
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     }
 }
 

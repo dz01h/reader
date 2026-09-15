@@ -1,4 +1,47 @@
 class NavProgressBar extends HTMLElement {
+    static DEFAULT_STYLE = `
+        :host {
+            display: block;
+            position: relative;
+            min-height: 15px;
+            border: 2px solid var(--color-border);
+            touchAction: none;
+            userSelect: none;
+            cursor: pointer;
+        }
+
+        :host::before {
+            content: attr(progress);
+            display: block;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-50%);
+            color: var(--color-text-muted);
+            font-size: 80%;
+        }
+
+        :host nav-progressbar-cursor {
+            display: none;
+            position: absolute;
+            width: 0;
+            height: 0;
+            top: 50%;
+        }
+
+        :host nav-progressbar-cursor::after {
+            content: "";
+            display: block;
+            width: 21px;
+            height: 21px;
+            border-radius: 50%;
+            border: 3px double var(--color-border);
+            background: white;
+            transform: translateX(-50%) translateY(-50%);
+            box-sizing: border-box;
+        }
+    `;
+
     constructor() {
         super();
         this.progress = 0;
@@ -7,60 +50,19 @@ class NavProgressBar extends HTMLElement {
     }
 
     get isRight2Left() {
-        return window._app && window._app.currentWritingMode === 'vertical';
+        return window._app && window._app.writingMode === 'vertical';
     }
 
     initComponent() {
-        this.style.position = this.style.position || 'relative';
-        this.style.touchAction = 'none';
-        this.style.userSelect = 'none';
-        this.style.cursor = 'pointer';
+        const host = this.attachShadow({ mode: 'open' });
 
-        this.cursor = document.createElement('nax-progressbar-cursor');
-        // this.cursor.classList.add('nax-progressbar-cursor');
-        this.appendChild(this.cursor);
+        this.cursor = document.createElement('nav-progressbar-cursor');
+        // this.cursor.classList.add('nav-progressbar-cursor');
+        host.appendChild(this.cursor);
 
-        const style = document.createElement('STYLE');
-        style.innerHTML = `
-            nax-progressbar {
-                display: block;
-                position: relative;
-                min-height: 15px;
-                border: 2px solid var(--color-border);
-            }
-
-            nax-progressbar::before {
-                content: attr(progress);
-                display: block;
-                position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translateX(-50%) translateY(-50%);
-                color: var(--color-text-muted);
-                font-size: 80%;
-            }
-
-            nax-progressbar-cursor {
-                display: none;
-                position: absolute;
-                width: 0;
-                height: 0;
-                top: 50%;
-            }
-
-            nax-progressbar-cursor::after {
-                content: "";
-                display: block;
-                width: 21px;
-                height: 21px;
-                border-radius: 50%;
-                border: 3px double var(--color-border);
-                background: white;
-                transform: translateX(-50%) translateY(-50%);
-                box-sizing: border-box;
-            }
-        `;
-        this.appendChild(style);
+        const innerStyle = new CSSStyleSheet();
+        innerStyle.replaceSync(NavProgressBar.DEFAULT_STYLE);
+        host.adoptedStyleSheets =[innerStyle];
 
         // 監聽閱讀面板渲染進度更新（拖曳時不被外部覆蓋）
         document.body.addEventListener('ReadingPanelRenderOver', e => {
@@ -180,4 +182,4 @@ class NavProgressBar extends HTMLElement {
 }
 
 window.NavProgressBar = NavProgressBar;
-customElements.define('nax-progressbar', NavProgressBar);
+customElements.define('nav-progressbar', NavProgressBar);

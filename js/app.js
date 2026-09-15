@@ -5,6 +5,8 @@ class ZenReaderApp {
     constructor() {
         window._app = this;
 
+        this.i18n = new I18nManager();
+
         // Global Error Logging
         window.addEventListener('error', (e) => this.logError(`${e.message} at ${e.filename}:${e.lineno}`));
         window.addEventListener('unhandledrejection', (e) => this.logError(`Unhandled Rejection: ${e.reason}`));

@@ -9,6 +9,7 @@ class ReadingPanel extends HTMLElement {
 
         // Inertia / Drag State
         this.isDragging = false;
+        this.activePointerId = null;
         this.dragStartX = 0;
         this.dragStartY = 0;
         this.dragGap = 8; // Displacement threshold (px) beyond which click action is ignored
@@ -24,22 +25,17 @@ class ReadingPanel extends HTMLElement {
     initComponent() {
         const canvas = this.canvas = document.createElement('canvas');
         canvas.classList.add('reader-canvas');
+        canvas.style.touchAction = 'none';
+        this.style.touchAction = 'none';
         (new ResizeObserver(this.resize.bind(this))).observe(canvas);
         this.appendChild(canvas);
         this.ctx = this.canvas.getContext('2d');
 
-        // Mouse Events
-        canvas.addEventListener('mousedown', (e) => this.onDragStart(e));
-        window.addEventListener('mousemove', (e) => this.onDragMove(e));
-        window.addEventListener('mouseup', () => this.onDragEnd());
-
-        // Touch Events
-        canvas.addEventListener('touchstart', (e) => this.onDragStart(e), { passive: false });
-        canvas.addEventListener('touchmove', (e) => this.onDragMove(e), { passive: false });
-        canvas.addEventListener('touchend', () => this.onDragEnd());
-
-        // Quadrant Click Navigation
-        canvas.addEventListener('click', (e) => this.handleClick(e));
+        // Pointer Events (Unifies mouse, touch and pen interactions)
+        canvas.addEventListener('pointerdown', (e) => this.onPointerDown(e));
+        canvas.addEventListener('pointermove', (e) => this.onPointerMove(e));
+        canvas.addEventListener('pointerup', (e) => this.onPointerUp(e));
+        canvas.addEventListener('pointercancel', (e) => this.onPointerCancel(e));
 
         // ReadingOperation Event Listener (Next / Prev / Page Actions)
         document.body.addEventListener('ReadingOperation', (e) => {
@@ -126,7 +122,7 @@ class ReadingPanel extends HTMLElement {
     render(stable = false) {
         if (!this.doc || !this.engine) return;
 
-        const rendingData = this.engine.render(
+        this.engine.render(
             this.ctx,
             this.doc,
             this.scrollOffset,
@@ -136,47 +132,54 @@ class ReadingPanel extends HTMLElement {
         );
 
         // Fire ReadingPanelRenderOver event with visible text ONLY when stable (debounced / committed)
-        if (stable && rendingData) {
+        if (stable) {
+            const rendingData = this.engine.getRenderData(this.doc);
             document.body.dispatchEvent(new CustomEvent('ReadingPanelRenderOver', { detail: rendingData }));
         }
     }
 
-    onDragStart(e) {
+    onPointerDown(e) {
         if (!this.doc || !this.engine) return;
-        if (e.touches && e.touches.length > 1) return;
+        // Ignore secondary mouse buttons (e.g. right-click)
+        if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
 
         if (this.inertiaFrameId) {
             cancelAnimationFrame(this.inertiaFrameId);
             this.inertiaFrameId = null;
         }
 
-        const p = e.touches ? e.touches[0] : e;
+        try {
+            this.canvas.setPointerCapture(e.pointerId);
+        } catch (err) {
+            // Ignore if pointer capture not supported
+        }
+
         this.isDragging = true;
-        this.dragStartX = p.clientX;
-        this.dragStartY = p.clientY;
+        this.activePointerId = e.pointerId;
+        this.dragStartX = e.clientX;
+        this.dragStartY = e.clientY;
         this.hasMovedPastGap = false;
         this.velocity = 0;
-        this.lastDragCoord = this.engine.writingMode === 'vertical' ? p.screenX : p.screenY;
+        this.lastDragCoord = this.engine.writingMode === 'vertical' ? e.screenX : e.screenY;
         this.lastTime = performance.now();
     }
 
-    onDragMove(e) {
+    onPointerMove(e) {
         if (!this.isDragging || !this.doc || !this.engine) return;
-        if (e.touches && e.touches.length > 1) return; // Ignore multi-touch gestures
-
-        const p = e.touches ? e.touches[0] : e;
+        if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
 
         if (!this.hasMovedPastGap) {
-            const dist = Math.hypot(p.clientX - this.dragStartX, p.clientY - this.dragStartY);
+            const dist = Math.hypot(e.clientX - this.dragStartX, e.clientY - this.dragStartY);
             if (dist > this.dragGap) {
                 this.hasMovedPastGap = true;
             }
         }
 
         if (e.cancelable) e.preventDefault();
-        const currentCoord = this.engine.writingMode === 'vertical' ? p.screenX : p.screenY;
 
-        // Content strictly follows finger displacement
+        const currentCoord = this.engine.writingMode === 'vertical' ? e.screenX : e.screenY;
+
+        // Content strictly follows pointer displacement
         const delta = currentCoord - this.lastDragCoord;
 
         const now = performance.now();
@@ -209,15 +212,43 @@ class ReadingPanel extends HTMLElement {
         this.render(false);
     }
 
-    onDragEnd() {
-        if (!this.isDragging) return;
+    onPointerUp(e) {
+        if (!this.isDragging || (this.activePointerId !== null && e.pointerId !== this.activePointerId)) return;
         this.isDragging = false;
+
+        try {
+            if (this.canvas.hasPointerCapture && this.canvas.hasPointerCapture(e.pointerId)) {
+                this.canvas.releasePointerCapture(e.pointerId);
+            }
+        } catch (err) {}
+
+        this.activePointerId = null;
+
+        // If pointer displacement remained within gap, treat as click action (quadrant navigation / toggle UI)
+        if (!this.hasMovedPastGap) {
+            this.handleClick(e);
+            return;
+        }
 
         if (Math.abs(this.velocity) > 1.5) {
             this.startInertialScroll(this.velocity * 12, 0.92);
         } else {
             this.commitScroll();
         }
+    }
+
+    onPointerCancel(e) {
+        if (!this.isDragging || (this.activePointerId !== null && e.pointerId !== this.activePointerId)) return;
+        this.isDragging = false;
+
+        try {
+            if (this.canvas.hasPointerCapture && this.canvas.hasPointerCapture(e.pointerId)) {
+                this.canvas.releasePointerCapture(e.pointerId);
+            }
+        } catch (err) {}
+
+        this.activePointerId = null;
+        this.commitScroll();
     }
 
     startInertialScroll(totalDisplacement, friction = 0.92) {
@@ -343,10 +374,6 @@ class ReadingPanel extends HTMLElement {
 
     handleClick(e) {
         if (!this.doc || !window._app) return;
-        if (this.hasMovedPastGap) {
-            this.hasMovedPastGap = false;
-            return;
-        }
         const rect = this.canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
         const y = e.clientY - rect.top;

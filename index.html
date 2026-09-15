@@ -35,7 +35,7 @@
             <input type="file" id="file-input" accept=".txt,.zip,.epub">
 
             <div class="controls">
-                <button id="btn-open-settings" data-i18n="title:openSettings" title="開啟設定">
+                <button id="btn-open-settings" data-i18n="title:openSettings" title="開啟設定" onclick="document.getElementById('settings-dialog').showModal();">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                 </button>
             </div>
@@ -49,7 +49,7 @@
         <footer class="status-bar" id="status-bar">
             <div class="status-main">
                 <div class="status-content">
-                    <nax-progressbar id="progress-slider" data-i18n="title:progressTitle" title="拖動調整閱讀進度"></nax-progressbar>
+                    <nav-progressbar id="progress-slider" data-i18n="title:progressTitle" title="拖動調整閱讀進度"></nav-progressbar>
                     <div class="status-bottom">
                         <div class="info-left">
                             <button id="btn-toc-toggle" class="icon-btn" title="章節清單">
@@ -84,105 +84,60 @@
 
     <dialog id="settings-dialog" class="settings-dialog">
         <setting-panel>
-        {
-            "lang": {
-                "label": "$settingLanguage",
-                "select": {
+            <list-selector field="lang" value="zh-TW" data-i18n="settingLanguage">
+                {
                     "zh-TW": "繁體中文 (Taiwan)",
                     "zh-CN": "简体中文 (China)",
                     "en-US": "English (US)",
                     "ja-JP": "日本語 (Japan)"
                 }
-            },
-            "theme": {
-                "label": "$settingTheme",
-                "binding": "theme",
-                "select": {
+            </setting-panel>
+            <list-selector field="theme" value="light" data-i18n="settingTheme">
+                {
                     "light": "$themeLight",
                     "dark": "$themeDark"
                 }
-            },
-            "writingMode": {
-                "label": "$settingDirection",
-                "select": {
+            </list-selector>
+            <list-selector field="writingMode" value="horizontal" data-i18n="settingDirection">
+                {
                     "horizontal": "$dirHorizontal",
                     "vertical": "$dirVertical"
                 }
-            },
-            "fontFamily": {
-                "label": "$settingFontFamily",
-                "select": {
+            </list-selector>
+            <list-selector field="fontFamily" value="sans-serif" data-i18n="settingFontFamily">
+                {
                     "sans-serif": "$fontSans",
                     "serif": "$fontSerif",
                     "monospace": "$fontMono"
-                },
-                "extraButton": {
-                    "id": "btn-load-local-fonts",
-                    "text": "從本機載入更多字型...",
-                    "action": "loadLocalFonts"
                 }
-            },
-            "fontSize": {
-                "label": "$settingFontSize",
-                "range-slider": {
-                    "min": 12,
-                    "max": 48,
-                    "step": 2,
-                    "unit": "px"
-                }
-            },
-            "lineHeight": {
-                "label": "%settingLineHeight",
-                "range-slider": {
-                    "min": 1.0,
-                    "max": 3.0,
-                    "step": 0.1
-                }
-            },
-            "margins": {
-                "legend": "$settingMargins",
-                "fieldset": {
-                    "margins.top": { "label": "⬆️", "range-slider": { "min": 0, "max": 150, "step": 1 } },
-                    "margins.bottom": { "label": "⬇️", "range-slider": { "min": 0, "max": 150, "step": 1 } },
-                    "margins.left": { "label": "⬅️", "range-slider": { "min": 0, "max": 150, "step": 1 } },
-                    "margins.right": { "label": "➡️", "range-slider": { "min": 0, "max": 150, "step": 1 } }
-                }
-            },
-            "quadrants": {
-                "legend": "$settingQuadrants",
-                "fieldset": {
-                    "quadTL": { "label": "↖️", "select": { "prev": "$actionPrev", "next": "$actionNext", "none": "$actionNone" } },
-                    "quadTR": { "label": "↗️", "select": { "prev": "$actionPrev", "next": "$actionNext", "none": "$actionNone" } },
-                    "quadBL": { "label": "↙️", "select": { "prev": "$actionPrev", "next": "$actionNext", "none": "$actionNone" } },
-                    "quadBR": { "label": "↘️", "select": { "prev": "$actionPrev", "next": "$actionNext", "none": "$actionNone" } }
-                }
-            },
-            "tts": {
-                "legend": "$settingTTS",
-                "fieldset": {
-                    "ttsModel": { "label": "$settingTTSModel", "ttsModelSelect": {} },
-                    "ttsSpeed": { "label": "$settingTTSSpeed", "range-slider": { "min": 0.5, "max": 2.0, "step": 0.1 } }
-                }
-            },
-            "advanced": {
-                "legend": "$settingAdvanced",
-                "fieldset": {
-                    "syncCooldown": {
-                        "type": "select",
-                        "label": "同步冷卻時間",
-                        "labelKey": "settingSyncCooldown",
-                        "binding": "syncCooldown",
-                        "options": { "1": "1 min", "5": "5 min", "10": "10 min", "15": "15 min", "30": "30 min", "60": "60 min" }
-                    },
-                    "btnSyncQr": { "type": "button", "id": "btn-sync-qr", "text": "顯示同步 QR Code", "textKey": "text:btnSyncQr", "action": "generateSyncQR" },
-                    "btnGoogleLogin": { "type": "button", "id": "btn-google-login", "text": "登入 Google 帳號", "textKey": "text:btnGoogleLogin", "action": "googleLogin" },
-                    "btnOpenReadingLog": { "type": "button", "id": "btn-open-reading-log", "text": "開啟 Reading Log 編輯", "action": "openReadingLog", "style": "display: none;" },
-                    "btnShowErrorLog": { "type": "button", "id": "btn-show-error-log", "text": "系統錯誤紀錄", "action": "showErrorLog" },
-                    "btnClearCache": { "type": "button", "id": "btn-clear-cache", "text": "清除所有快取 (Clear Cache)", "action": "clearCache", "danger": true },
-                    "qrContainer": { "type": "container", "id": "qr-container", "class": "hidden", "html": "<div id=\"qr-code\"></div><p style=\"color: black; font-size: 0.8rem; margin-top: 0.5rem; font-weight: bold;\">使用手機掃描 QR Code 即可自動同步設定</p>" }
-                }
-            }
-        }
+            </list-selector>
+            <action-button action="loadLocalFonts" data-i18n="settingLoadLocalFont"></action-button>
+
+            <range-slider field="fontSize" data-i18n="settingFontSize" min="12" max="48" step="2" value="18"></range-slider>
+            <range-slider field="lineHeight" data-i18n="settingLineHeight" min="1.0" max="4.0" step="0.1" value="1.8"></range-slider>
+            <fieldset class="setting-fieldset">
+                <legend data-i18n="settingMarginsGroup"></legend>
+                <range-slider field="margins.top" min="0" max="100" step="1" value="30">⬆️</range-slider>
+                <range-slider field="margins.bottom" min="0" max="100" step="1" value="30">⬇️</range-slider>
+                <range-slider field="margins.left" min="0" max="100" step="1" value="30">⬅️</range-slider>
+                <range-slider field="margins.right" min="0" max="100" step="1" value="30">➡️</range-slider>
+            </fieldset>
+            <quad-actions></quad-actions>
+            <fieldset class="setting-fieldset">
+                <legend data-i18n="settingTTS"></legend>
+                <list-selector field="ttsModel" value="" data-i18n="settingTTSModel">{}</list-selector>
+                <range-slider field="ttsSpeed" min="0.5" max="2.0" step="0.1" value="1.0" data-i18n="settingTTSSpeed"></range-slider>
+            </fieldset>
+            <fieldset class="setting-fieldset">
+                <legend data-i18n="settingAdvanced"></legend>
+                <list-selector field="syncCooldown" value="30" data-i18n="settingSyncCooldown">
+                    { "1": "1 min", "5": "5 min", "10": "10 min", "15": "15 min", "30": "30 min", "60": "60 min" }
+                </list-selector>
+                <range-slider field="ttsSpeed" min="0.5" max="2.0" step="0.1" value="1.0" data-i18n="settingTTSSpeed"></range-slider>
+                <action-button id="btn-google-login" action="googleLogin" data-i18n="btnGoogleLogin"></action-button>
+                <action-button id="btn-open-reading-log" action="openReadingLog" data-i18n="btnOpenReadingLog"></action-button>
+                <action-button id="btn-clear-cache" action="clearCache" data-i18n="clearCache"></action-button>
+            </fieldset>
         </setting-panel>
     </dialog>
 
@@ -204,8 +159,8 @@
     <script src="js/db.js"></script>
     <script src="js/book.js"></script>
     <script src="js/i18n.js"></script>
-    <script src="js/reading-document.js"></script>
-    <script src="js/text-render-engine.js"></script>
+    <script src="js/components/reader/reading-document.js"></script>
+    <script src="js/components/reader/text-render-engine.js"></script>
     <script src="js/tts/chunks.js"></script>
     <script src="js/tts/webspeech.js"></script>
     <!-- Dependencies for Matcha TTS (Option C: ORT + pinyin-pro) -->
@@ -214,9 +169,12 @@
     <script src="js/tts/matcha.js"></script>
     <script src="js/tts.js"></script>
     <script src="js/reading-log.js"></script>
-    <script src="js/reading-panel.js"></script>
+    <script src="js/components/reader/reading-panel.js"></script>
     <script src="js/nav-progressbar.js"></script>
-    <script src="js/settings.js"></script>
+    <script src="js/components/settings/range-slider.js"></script>
+    <script src="js/components/settings/list-selector.js"></script>
+    <script src="js/components/settings/action-button.js"></script>
+    <script src="js/components/settings/setting-panel.js"></script>
     <script src="js/file-explorer.js"></script>
     <script src="js/zip-handler.js"></script>
     <script src="js/gdrive.js"></script>
