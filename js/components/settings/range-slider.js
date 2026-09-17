@@ -14,9 +14,16 @@ class RangeSlider extends HTMLElement {
             line-height: 2.5;
         }
         :host::before {
-            content: " ";
-            display: block;
+            content: attr(label);
+            display: inline;
             min-height: 32px;
+        }
+        :host::after {
+            content: attr(value);
+            content: attr(value);
+            position: absolute;
+            right: 1rem;
+            top: 0;
         }
         .custom-slider-track {
             position: relative;
@@ -172,6 +179,7 @@ class RangeSlider extends HTMLElement {
         const pct = range > 0 ? Math.max(0, Math.min(100, ((this._value - this._min) / range) * 100)) : 0;
         this.fill.style.width = `${pct}%`;
         this.thumb.style.left = `${pct}%`;
+        this.setAttribute('value', this._value);
     }
 
     handleMove(clientX, isCommit = false) {

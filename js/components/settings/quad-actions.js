@@ -5,10 +5,13 @@ class QuadActions extends HTMLElement {
     }
 
     initComponent() {
-        this.className = 'setting-fieldset setting-group-row';
+        const f = document.createElement('fieldset');
+        f.className = 'setting-fieldset setting-group-row';
+        this.appendChild(f);
+        
         const l = document.createElement('legend');
         l.setAttribute('data-i18n', 'settingQuadrants');
-        this.append(l);
+        f.append(l);
         const actions = JSON.stringify({
             "prev": "$actionPrev",
             "next": "$actionNext",
@@ -21,7 +24,7 @@ class QuadActions extends HTMLElement {
             selector.setAttribute('data-i18n', p);
             selector.value = toBuild[p];
             selector.className = 'setting-group half';
-            this.append(selector);
+            f.append(selector);
         }
     }
 }

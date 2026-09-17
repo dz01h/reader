@@ -4,6 +4,10 @@ class SettingPanel extends HTMLElement {
         this.initComponent();
     }
 
+    connectedCallback() {
+        this.bindParentDialog();
+    }
+
     initComponent() {
         // 1. Header
         const header = document.createElement('div');
@@ -16,10 +20,39 @@ class SettingPanel extends HTMLElement {
             <div style="width: 24px;"></div>
         `;
         this.prepend(header);
-        header.querySelector('.btn-close').addEventListener('click', e => { this.parentElement.close(); });
+        header.querySelector('.btn-close').addEventListener('click', e => {
+            const dialog = this.parentElement || this.closest('dialog');
+            if (dialog && typeof dialog.close === 'function') {
+                dialog.close();
+            }
+        });
 
-        this.parentElement.addEventListener('initComponent', e => { (e.newState === 'open') && this.loadData(); });
+        this.bindParentDialog();
         this.addEventListener('settingUpdated', e => { this.syncValue(e); });
+    }
+
+    bindParentDialog() {
+        const dialog = this.parentElement || this.closest('dialog');
+        if (!dialog || dialog._settingPanelBound) return;
+        dialog._settingPanelBound = true;
+
+        dialog.addEventListener('initComponent', e => { (e.newState === 'open') && this.loadData(); });
+
+        // 點擊毛玻璃 (backdrop) 關閉 dialog
+        dialog.addEventListener('click', e => {
+            if (e.target === dialog) {
+                const rect = dialog.getBoundingClientRect();
+                const isOutside = (
+                    e.clientX < rect.left ||
+                    e.clientX > rect.right ||
+                    e.clientY < rect.top ||
+                    e.clientY > rect.bottom
+                );
+                if (isOutside && typeof dialog.close === 'function') {
+                    dialog.close();
+                }
+            }
+        });
     }
 
     loadData() {
@@ -35,7 +68,7 @@ class SettingPanel extends HTMLElement {
         const fieldLayer = e.detail.field.split('.');
         const keyField = fieldLayer.pop();
         let target = window._app;
-        for(let f in fieldLayer) target = target[f];
+        for(let f of fieldLayer) target = target[f];
         target[keyField] = e.detail.value;
         document.body.dispatchEvent(new CustomEvent('ReadingOperation', {detail: { action: 'render' }}));
     }
