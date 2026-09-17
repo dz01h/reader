@@ -137,7 +137,7 @@ class ActionButton extends HTMLElement {
         };
 
         // Dispatch on the button itself (bubbles up)
-        this.dispatchEvent(new CustomEvent('actionPerformed', {
+        this.dispatchEvent(new CustomEvent('ActionPerformed', {
             bubbles: true,
             composed: true,
             detail: detail
