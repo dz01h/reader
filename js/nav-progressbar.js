@@ -1,4 +1,4 @@
-class NavProgressBar extends HTMLElement {
+class NavProgressBar extends Component {
     static DEFAULT_STYLE = `
         :host {
             display: block;
@@ -147,24 +147,16 @@ class NavProgressBar extends HTMLElement {
 
     dispatchProgress(progress, isCommit = false) {
         // 觸發 ReadingOperation 事件通知 ReadingPanel 更新進度
-        document.body.dispatchEvent(new CustomEvent('ReadingOperation', {
-            detail: {
-                action: 'setProgress',
-                params: [progress]
-            }
-        }));
+        this.fireEvent('ReadingOperation', {
+            action: 'setProgress',
+            params: [progress]
+        }, true);
 
         // 觸發自定義 DOM 事件
-        this.dispatchEvent(new CustomEvent('input', {
-            detail: { progress, isCommit },
-            bubbles: true
-        }));
+        this.fireEvent('input', { progress, isCommit }, true);
 
         if (isCommit) {
-            this.dispatchEvent(new CustomEvent('change', {
-                detail: { progress },
-                bubbles: true
-            }));
+            this.fireEvent('change', { progress }, true);
         }
     }
 

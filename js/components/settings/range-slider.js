@@ -1,4 +1,4 @@
-class RangeSlider extends HTMLElement {
+class RangeSlider extends Component {
 
     static DEFAULT_STYLE = `
         :host {
@@ -159,13 +159,10 @@ class RangeSlider extends HTMLElement {
         if(triggerChange)   event = new Event('change', { bubbles: true });
         if(event) {
             queueMicrotask(() => { this.dispatchEvent(event); });
-            queueMicrotask(() => { this.dispatchEvent(new CustomEvent('settingUpdated', {
-                bubbles: true,
-                detail: {
-                    field: this.getAttribute('field'),
-                    value: this._value
-                }
-            })); });
+            this.fireEvent('settingUpdated', {
+                field: this.getAttribute('field'),
+                value: this._value
+            }, true);
         }
 
 

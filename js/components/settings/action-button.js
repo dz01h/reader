@@ -1,4 +1,4 @@
-class ActionButton extends HTMLElement {
+class ActionButton extends Component {
     static get observedAttributes() {
         return ['action', 'disabled', 'variant'];
     }
@@ -137,11 +137,7 @@ class ActionButton extends HTMLElement {
         };
 
         // Dispatch on the button itself (bubbles up)
-        this.dispatchEvent(new CustomEvent('ActionPerformed', {
-            bubbles: true,
-            composed: true,
-            detail: detail
-        }));
+        this.fireEvent('ActionPerformed', detail, true);
     }
 
     bindEvents() {

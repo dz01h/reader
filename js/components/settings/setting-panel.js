@@ -1,4 +1,4 @@
-class SettingPanel extends HTMLElement {
+class SettingPanel extends Component {
     constructor() {
         super();
         this.initComponent();
@@ -21,7 +21,7 @@ class SettingPanel extends HTMLElement {
         `;
         this.prepend(header);
         header.querySelector('.btn-close').addEventListener('click', e => {
-            const dialog = this.parentElement || this.closest('dialog');
+            const dialog = this.parentElement || this.closest?.('dialog');
             if (dialog && typeof dialog.close === 'function') {
                 dialog.close();
             }
@@ -32,7 +32,7 @@ class SettingPanel extends HTMLElement {
     }
 
     bindParentDialog() {
-        const dialog = this.parentElement || this.closest('dialog');
+        const dialog = this.parentElement || this.closest?.('dialog');
         if (!dialog || dialog._settingPanelBound) return;
         dialog._settingPanelBound = true;
 
@@ -70,7 +70,7 @@ class SettingPanel extends HTMLElement {
         let target = window._app;
         for(let f of fieldLayer) target = target[f];
         target[keyField] = e.detail.value;
-        document.body.dispatchEvent(new CustomEvent('ReadingOperation', {detail: { action: 'render' }}));
+        this.fireEvent('ReadingOperation', { action: 'render' }, true);
     }
 
 }

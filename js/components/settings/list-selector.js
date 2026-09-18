@@ -1,4 +1,4 @@
-class ListSelector extends HTMLElement {
+class ListSelector extends Component {
 
     static DEFAULT_STYLE = `
     @scope {
@@ -220,17 +220,11 @@ class ListSelector extends HTMLElement {
 
         if (fireChange) {
             this.dispatchEvent(new Event('change', { bubbles: true }));
-            this.dispatchEvent(new CustomEvent('input', {
-                bubbles: true,
-                detail: { value: this._value }
-            }));
-            this.dispatchEvent(new CustomEvent('settingUpdated', {
-                bubbles: true,
-                detail: {
-                    field: this.getAttribute('field'),
-                    value: this._value
-                }
-            }));
+            this.fireEvent('input', { value: this._value }, true);
+            this.fireEvent('settingUpdated', {
+                field: this.getAttribute('field'),
+                value: this._value
+            }, true);
         }
 
         return changed;

@@ -1,4 +1,4 @@
-class QuadActions extends HTMLElement {
+class QuadActions extends Component {
     constructor() {
         super();
         this.initComponent();
@@ -29,6 +29,7 @@ class QuadActions extends HTMLElement {
     }
 }
 
+window.QuadActions = QuadActions;
 window.QuadCommends = QuadActions;
 customElements.define('quad-actions', QuadActions);
 

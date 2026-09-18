@@ -1,4 +1,4 @@
-class ReadingPanel extends HTMLElement {
+class ReadingPanel extends Component {
     constructor() {
         super();
 
@@ -8,15 +8,9 @@ class ReadingPanel extends HTMLElement {
         this.scrollOffset = 0; // Drag displacement in CSS logical pixels relative to zeroIndex
 
         // Inertia / Drag State
-        this.isDragging = false;
-        this.activePointerId = null;
-        this.dragStartX = 0;
-        this.dragStartY = 0;
+        this.dragging = null;
+
         this.dragGap = 8; // Displacement threshold (px) beyond which click action is ignored
-        this.hasMovedPastGap = false;
-        this.lastDragCoord = 0;
-        this.velocity = 0;
-        this.lastTime = 0;
         this.inertiaFrameId = null;
 
         this.initComponent();
@@ -134,8 +128,27 @@ class ReadingPanel extends HTMLElement {
         // Fire ReadingPanelRenderOver event with visible text ONLY when stable (debounced / committed)
         if (stable) {
             const rendingData = this.engine.getRenderData(this.doc);
-            document.body.dispatchEvent(new CustomEvent('ReadingPanelRenderOver', { detail: rendingData }));
+            this.fireEvent('ReadingPanelRenderOver', rendingData, true);
         }
+    }
+
+    prepareInertia(e) {
+        const coord = (this.engine.writingMode === 'vertical') ? 'screenX' : 'screenY';
+        const inertia  = {
+            position: e[coord],
+            velocity: 0,
+            time: performance.now()
+        };
+        inertia.update = (function(e) {
+            const delta = e[coord] - this.position;
+            const now = performance.now();
+            const dt = Math.max(1, now - this.time);
+            this.velocity = (delta / dt) * 16.67;
+            this.position = e[coord];
+            this.time = now;
+            return delta;
+        }).bind(inertia);
+        return inertia;
     }
 
     onPointerDown(e) {
@@ -148,46 +161,40 @@ class ReadingPanel extends HTMLElement {
             this.inertiaFrameId = null;
         }
 
-        try {
-            this.canvas.setPointerCapture(e.pointerId);
-        } catch (err) {
-            // Ignore if pointer capture not supported
-        }
+        const pointerId = e.pointerId;
 
-        this.isDragging = true;
-        this.activePointerId = e.pointerId;
-        this.dragStartX = e.clientX;
-        this.dragStartY = e.clientY;
-        this.hasMovedPastGap = false;
-        this.velocity = 0;
-        this.lastDragCoord = this.engine.writingMode === 'vertical' ? e.screenX : e.screenY;
-        this.lastTime = performance.now();
+        try {
+            this.canvas.setPointerCapture(pointerId);
+        } catch (err) {}
+
+        this.dragging = {
+            activePointerId: pointerId,
+            x: e.clientX,
+            y: e.clientY,
+            isDrag: false,
+            inertia: this.prepareInertia(e)
+        };
+
+        this.dragging.end = () => {
+            try {
+                if (this.canvas.hasPointerCapture && this.canvas.hasPointerCapture(pointerId)) {
+                    this.canvas.releasePointerCapture(pointerId);
+                }
+            } catch (err) {}
+            return null;
+        };
     }
 
     onPointerMove(e) {
-        if (!this.isDragging || !this.doc || !this.engine) return;
-        if (this.activePointerId !== null && e.pointerId !== this.activePointerId) return;
+        if (!this.dragging || !this.doc || !this.engine) return;
+        if (e.pointerId !== this.dragging.activePointerId) return;
+        e.preventDefault();
 
-        if (!this.hasMovedPastGap) {
-            const dist = Math.hypot(e.clientX - this.dragStartX, e.clientY - this.dragStartY);
-            if (dist > this.dragGap) {
-                this.hasMovedPastGap = true;
-            }
-        }
-
-        if (e.cancelable) e.preventDefault();
-
-        const currentCoord = this.engine.writingMode === 'vertical' ? e.screenX : e.screenY;
+        const dist = Math.hypot(e.clientX - this.dragging.x, e.clientY - this.dragging.y);
+        this.dragging.isDrag ||= (dist > this.dragGap);
 
         // Content strictly follows pointer displacement
-        const delta = currentCoord - this.lastDragCoord;
-
-        const now = performance.now();
-        const dt = Math.max(1, now - this.lastTime);
-        this.velocity = (delta / dt) * 16.67;
-
-        this.lastDragCoord = currentCoord;
-        this.lastTime = now;
+        const delta = this.dragging.inertia.update(e);
 
         // Boundary resistance damping
         const renderData = this.engine.getRenderData(this.doc);
@@ -213,41 +220,31 @@ class ReadingPanel extends HTMLElement {
     }
 
     onPointerUp(e) {
-        if (!this.isDragging || (this.activePointerId !== null && e.pointerId !== this.activePointerId)) return;
-        this.isDragging = false;
+        console.log(e);
+        if (!this.dragging || e.pointerId !== this.dragging.activePointerId) return;
+        const dragging = this.dragging;
+        this.dragging = null;
 
-        try {
-            if (this.canvas.hasPointerCapture && this.canvas.hasPointerCapture(e.pointerId)) {
-                this.canvas.releasePointerCapture(e.pointerId);
-            }
-        } catch (err) {}
-
-        this.activePointerId = null;
-
-        // If pointer displacement remained within gap, treat as click action (quadrant navigation / toggle UI)
-        if (!this.hasMovedPastGap) {
-            this.handleClick(e);
-            return;
-        }
-
-        if (Math.abs(this.velocity) > 1.5) {
-            this.startInertialScroll(this.velocity * 12, 0.92);
+        if (Math.abs(dragging.inertia.velocity) > 1.5) {
+            this.startInertialScroll(dragging.inertia.velocity * 12, 0.92);
         } else {
             this.commitScroll();
+        }
+
+        if(!dragging.isDrag) {
+            const options = {};
+            for(let k in PointerEvent.prototype) {
+                if(typeof e[k] !== 'function') {
+                    options[k] = e[k];
+                }
+            }
+            this.fireEvent(new PointerEvent('click', options));
         }
     }
 
     onPointerCancel(e) {
-        if (!this.isDragging || (this.activePointerId !== null && e.pointerId !== this.activePointerId)) return;
-        this.isDragging = false;
-
-        try {
-            if (this.canvas.hasPointerCapture && this.canvas.hasPointerCapture(e.pointerId)) {
-                this.canvas.releasePointerCapture(e.pointerId);
-            }
-        } catch (err) {}
-
-        this.activePointerId = null;
+        if (!this.dragging || e.pointerId !== this.dragging.activePointerId) return;
+        this.dragging = this.dragging.end();
         this.commitScroll();
     }
 
@@ -260,7 +257,7 @@ class ReadingPanel extends HTMLElement {
         let currentV = totalDisplacement * (1 - friction);
 
         const loop = () => {
-            if (this.isDragging) {
+            if (this.dragging) {
                 this.inertiaFrameId = null;
                 return;
             }
@@ -372,37 +369,6 @@ class ReadingPanel extends HTMLElement {
         this.render(true);
     }
 
-    handleClick(e) {
-        if (!this.doc || !window._app) return;
-        const rect = this.canvas.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-
-        // Middle 40% toggles UI
-        const isMiddleX = x > rect.width * 0.3 && x < rect.width * 0.7;
-        const isMiddleY = y > rect.height * 0.3 && y < rect.height * 0.7;
-
-        const app = window._app;
-
-        if (isMiddleX && isMiddleY) {
-            if (app && typeof app.toggleUI === 'function') {
-                app.toggleUI();
-            }
-            return;
-        }
-
-        const hw = rect.width / 2;
-        const hh = rect.height / 2;
-        let action = 'none';
-
-        if (x < hw && y < hh) action = app.quadTL || 'prev';
-        else if (x >= hw && y < hh) action = app.quadTR || 'next';
-        else if (x < hw && y >= hh) action = app.quadBL || 'prev';
-        else action = app.quadBR || 'next';
-
-        this.executeAction(action);
-    }
-
     nextPage() {
         this.executeAction('next');
     }
@@ -437,6 +403,92 @@ class ReadingPanel extends HTMLElement {
         this.render(true);
     }
 }
+
+ReadingPanel.ScrollOperator = class {
+    constructor(pointerEvent) {
+        this.target = pointerEvent.target;
+        this.panel = pointerEvent.target.parentElement;
+        this.activePointerId = pointerEvent.pointerId;
+        this.x = pointerEvent.clientX;
+        this.y = pointerEvent.clientY;
+        this.isDrag = false;
+
+        this.coord = (this.engine.writingMode === 'vertical') ? 'screenX' : 'screenY';
+        this.velocity = 0;
+        this.position = pointerEvent[this.coord];
+        this.time = performance.now();
+
+        this.target.setPointerCapture(this.activePointerId);
+    }
+
+    update(pointerEvent) {
+        const delta = pointerEvent[coord] - this.position;
+        const now = performance.now();
+        const dt = Math.max(1, now - this.time);
+        this.velocity = (delta / dt) * 16.67;
+        this.position = pointerEvent[coord];
+        this.time = now;
+    }
+
+    finish() {
+        if(this.target.hasPointerCapture(this.activePointerId)) {
+            this.target.releasePointerCapture(this.activePointerId);
+        }
+    }
+
+    startInertialScroll(totalDisplacement, friction = 0.92) {
+        if (this.inertiaFrameId) {
+            cancelAnimationFrame(this.inertiaFrameId);
+            this.inertiaFrameId = null;
+        }
+
+        let currentV = totalDisplacement * (1 - friction);
+
+        const loop = () => {
+            if (this.dragging) {
+                this.inertiaFrameId = null;
+                return;
+            }
+
+            if (Math.abs(currentV) < 0.5) {
+                this.inertiaFrameId = null;
+                this.commitScroll();
+                return;
+            }
+
+            this.scrollOffset += currentV;
+            this.render(false);
+            currentV *= friction;
+
+            // Damping near window edges
+            const renderData = this.engine ? this.engine.getRenderData(this.doc) : null;
+            if (renderData) {
+                const isVert = this.engine.writingMode === 'vertical';
+                const forwardLines = renderData.lines.length - 1 - renderData.zeroIndex;
+                const backwardLines = renderData.zeroIndex;
+                const minScroll = isVert ? -backwardLines * this.engine.lineHeight : -forwardLines * this.engine.lineHeight;
+                const maxScroll = isVert ? forwardLines * this.engine.lineHeight : backwardLines * this.engine.lineHeight;
+
+                if (this.scrollOffset < minScroll || this.scrollOffset > maxScroll) {
+                    currentV *= 0.5;
+                    if (this.scrollOffset < minScroll && this.doc.progress <= (isVert ? 0 : 1)) {
+                        this.scrollOffset = minScroll;
+                    }
+                    if (this.scrollOffset > maxScroll && this.doc.progress >= (isVert ? 1 : 0)) {
+                        this.scrollOffset = maxScroll;
+                    }
+                }
+            }
+
+            this.inertiaFrameId = requestAnimationFrame(loop);
+        };
+
+        this.inertiaFrameId = requestAnimationFrame(loop);
+    }
+
+
+};
+
 
 window.ReadingPanel = ReadingPanel;
 customElements.define('reading-panel', ReadingPanel);
