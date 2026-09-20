@@ -265,19 +265,32 @@ class TextRenderEngine {
         const formattedLineIndexs = [];
         let formattedZeroIndex = 0;
 
+        const totalLen = rawData.totalLength || (doc.text ? doc.text.length : 0);
+        const targetOffset = Math.max(0, Math.min(totalLen, Math.round(doc.progress * totalLen)));
+
         for (let i = 0; i < rawData.lines.length; i++) {
             const rawLine = rawData.lines[i];
             const rawPos = rawData.lineIndexs ? rawData.lineIndexs[i] : (rawData.startCharOffset || 0);
 
-            if (i === rawData.zeroIndex) {
-                formattedZeroIndex = formattedLines.length;
-            }
-
             if (rawLine.trim().length === 0) {
+                if (i === rawData.zeroIndex) {
+                    formattedZeroIndex = formattedLines.length;
+                }
                 formattedLines.push('');
                 formattedLineIndexs.push(rawPos);
             } else {
                 const layoutRes = this.inlineLayout(rawLine, rawPos);
+                if (i === rawData.zeroIndex) {
+                    let sublineIdx = 0;
+                    for (let k = 0; k < layoutRes.lineIndexs.length; k++) {
+                        if (targetOffset >= layoutRes.lineIndexs[k]) {
+                            sublineIdx = k;
+                        } else {
+                            break;
+                        }
+                    }
+                    formattedZeroIndex = formattedLines.length + sublineIdx;
+                }
                 for (let k = 0; k < layoutRes.lines.length; k++) {
                     formattedLines.push(layoutRes.lines[k]);
                     formattedLineIndexs.push(layoutRes.lineIndexs[k]);

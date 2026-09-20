@@ -113,13 +113,13 @@ class ReadingPanel extends Component {
         }
     }
 
-    render(stable = false) {
+    render(stable = false, offset = 0) {
         if (!this.doc || !this.engine) return;
 
         this.engine.render(
             this.ctx,
             this.doc,
-            this.scrollOffset,
+            offset,
             {
                 showMargins: document.body.classList.contains('settings-interacting')
             }
@@ -153,85 +153,19 @@ class ReadingPanel extends Component {
 
     onPointerDown(e) {
         if (!this.doc || !this.engine) return;
-        // Ignore secondary mouse buttons (e.g. right-click)
-        if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
-
-        if (this.inertiaFrameId) {
-            cancelAnimationFrame(this.inertiaFrameId);
-            this.inertiaFrameId = null;
-        }
-
-        const pointerId = e.pointerId;
-
-        try {
-            this.canvas.setPointerCapture(pointerId);
-        } catch (err) {}
-
-        this.dragging = {
-            activePointerId: pointerId,
-            x: e.clientX,
-            y: e.clientY,
-            isDrag: false,
-            inertia: this.prepareInertia(e)
-        };
-
-        this.dragging.end = () => {
-            try {
-                if (this.canvas.hasPointerCapture && this.canvas.hasPointerCapture(pointerId)) {
-                    this.canvas.releasePointerCapture(pointerId);
-                }
-            } catch (err) {}
-            return null;
-        };
+        this.dragging = ReadingPanel.ScrollOperator.start(e);
     }
 
     onPointerMove(e) {
-        if (!this.dragging || !this.doc || !this.engine) return;
-        if (e.pointerId !== this.dragging.activePointerId) return;
+        if (!this.dragging || e.pointerId !== this.dragging.pid) return;
         e.preventDefault();
-
-        const dist = Math.hypot(e.clientX - this.dragging.x, e.clientY - this.dragging.y);
-        this.dragging.isDrag ||= (dist > this.dragGap);
-
-        // Content strictly follows pointer displacement
-        const delta = this.dragging.inertia.update(e);
-
-        // Boundary resistance damping
-        const renderData = this.engine.getRenderData(this.doc);
-        if (renderData) {
-            const isVert = this.engine.writingMode === 'vertical';
-            const forwardLines = renderData.lines.length - 1 - renderData.zeroIndex;
-            const backwardLines = renderData.zeroIndex;
-            const minScroll = isVert ? -backwardLines * this.engine.lineHeight : -forwardLines * this.engine.lineHeight;
-            const maxScroll = isVert ? forwardLines * this.engine.lineHeight : backwardLines * this.engine.lineHeight;
-
-            const nextOffset = this.scrollOffset + delta;
-
-            if ((nextOffset < minScroll && this.doc.progress <= (isVert ? 0 : 1)) || (nextOffset > maxScroll && this.doc.progress >= (isVert ? 1 : 0))) {
-                this.scrollOffset += delta * 0.3;
-            } else {
-                this.scrollOffset = nextOffset;
-            }
-        } else {
-            this.scrollOffset += delta;
-        }
-
-        this.render(false);
+        this.dragging.logLastPosition(e);
     }
 
     onPointerUp(e) {
-        console.log(e);
-        if (!this.dragging || e.pointerId !== this.dragging.activePointerId) return;
-        const dragging = this.dragging;
-        this.dragging = null;
-
-        if (Math.abs(dragging.inertia.velocity) > 1.5) {
-            this.startInertialScroll(dragging.inertia.velocity * 12, 0.92);
-        } else {
-            this.commitScroll();
-        }
-
-        if(!dragging.isDrag) {
+        if (!this.dragging || e.pointerId !== this.dragging.pid) return;
+        this.dragging.finish(e);
+        if(!this.dragging.isDrag) {
             const options = {};
             for(let k in PointerEvent.prototype) {
                 if(typeof e[k] !== 'function') {
@@ -240,62 +174,13 @@ class ReadingPanel extends Component {
             }
             this.fireEvent(new PointerEvent('click', options));
         }
+        this.dragging = null;
     }
 
     onPointerCancel(e) {
-        if (!this.dragging || e.pointerId !== this.dragging.activePointerId) return;
-        this.dragging = this.dragging.end();
+        if (!this.dragging || e.pointerId !== this.dragging.pid) return;
+        this.dragging = this.dragging.finish();
         this.commitScroll();
-    }
-
-    startInertialScroll(totalDisplacement, friction = 0.92) {
-        if (this.inertiaFrameId) {
-            cancelAnimationFrame(this.inertiaFrameId);
-            this.inertiaFrameId = null;
-        }
-
-        let currentV = totalDisplacement * (1 - friction);
-
-        const loop = () => {
-            if (this.dragging) {
-                this.inertiaFrameId = null;
-                return;
-            }
-
-            if (Math.abs(currentV) < 0.5) {
-                this.inertiaFrameId = null;
-                this.commitScroll();
-                return;
-            }
-
-            this.scrollOffset += currentV;
-            this.render(false);
-            currentV *= friction;
-
-            // Damping near window edges
-            const renderData = this.engine ? this.engine.getRenderData(this.doc) : null;
-            if (renderData) {
-                const isVert = this.engine.writingMode === 'vertical';
-                const forwardLines = renderData.lines.length - 1 - renderData.zeroIndex;
-                const backwardLines = renderData.zeroIndex;
-                const minScroll = isVert ? -backwardLines * this.engine.lineHeight : -forwardLines * this.engine.lineHeight;
-                const maxScroll = isVert ? forwardLines * this.engine.lineHeight : backwardLines * this.engine.lineHeight;
-
-                if (this.scrollOffset < minScroll || this.scrollOffset > maxScroll) {
-                    currentV *= 0.5;
-                    if (this.scrollOffset < minScroll && this.doc.progress <= (isVert ? 0 : 1)) {
-                        this.scrollOffset = minScroll;
-                    }
-                    if (this.scrollOffset > maxScroll && this.doc.progress >= (isVert ? 1 : 0)) {
-                        this.scrollOffset = maxScroll;
-                    }
-                }
-            }
-
-            this.inertiaFrameId = requestAnimationFrame(loop);
-        };
-
-        this.inertiaFrameId = requestAnimationFrame(loop);
     }
 
     /**
@@ -348,25 +233,39 @@ class ReadingPanel extends Component {
 
     /**
      * Snap displacement to nearest line and commit new progress to ReadingDocument
+     * Returns the residual scroll offset (the gap between current scrollOffset and the snapped line position).
+     * @param {number} scrollOffset
+     * @returns {number} Residual scroll offset in pixels
      */
-    commitScroll() {
-        if (!this.doc || !this.engine) return;
+    commitScroll(scrollOffset = 0) {
+        if (!this.doc || !this.engine) return 0;
 
         const lineHeight = this.engine.lineHeight;
         const isVert = this.engine.writingMode === 'vertical';
         const linesScrolled = isVert
-            ? Math.round(this.scrollOffset / lineHeight)
-            : -Math.round(this.scrollOffset / lineHeight);
+            ? Math.round(scrollOffset / lineHeight)
+            : -Math.round(scrollOffset / lineHeight);
 
         const renderData = this.engine.getRenderData(this.doc);
+        let actualLinesScrolled = 0;
+
         if (renderData && renderData.lines && renderData.lines.length > 0 && linesScrolled !== 0) {
             const targetIdx = Math.max(0, Math.min(renderData.lines.length - 1, renderData.zeroIndex + linesScrolled));
+            actualLinesScrolled = targetIdx - renderData.zeroIndex;
             const newProgress = this.calculateProgressAtLine(renderData, targetIdx);
             this.doc.setProgress(newProgress);
         }
 
-        this.scrollOffset = 0;
+        // 計算被進度磁性吸收的像素位移量 (snapped pixels)
+        const snappedPixels = isVert
+            ? actualLinesScrolled * lineHeight
+            : -actualLinesScrolled * lineHeight;
+
+        // 計算未被吸收的殘留位移差距 (residual offset)
+        const residualOffset = scrollOffset - snappedPixels;
+
         this.render(true);
+        return residualOffset;
     }
 
     nextPage() {
@@ -405,88 +304,105 @@ class ReadingPanel extends Component {
 }
 
 ReadingPanel.ScrollOperator = class {
-    constructor(pointerEvent) {
-        this.target = pointerEvent.target;
-        this.panel = pointerEvent.target.parentElement;
-        this.activePointerId = pointerEvent.pointerId;
-        this.x = pointerEvent.clientX;
-        this.y = pointerEvent.clientY;
-        this.isDrag = false;
+    static friction = 0.92;
+    static dragGap = 8;
+    static instance;
+    static next_id = 1;
 
-        this.coord = (this.engine.writingMode === 'vertical') ? 'screenX' : 'screenY';
-        this.velocity = 0;
-        this.position = pointerEvent[this.coord];
-        this.time = performance.now();
-
-        this.target.setPointerCapture(this.activePointerId);
+    static start(e) {
+        const self = ReadingPanel.ScrollOperator;
+        let off = 0;
+        if (self.instance) {
+            const last = self.instance;
+            last.finish();
+            off = last.target.parentElement.commitScroll(last.scrollOffset);
+        }
+        self.instance = new ReadingPanel.ScrollOperator(e, off);
+        return self.instance;
     }
 
-    update(pointerEvent) {
-        const delta = pointerEvent[coord] - this.position;
-        const now = performance.now();
-        const dt = Math.max(1, now - this.time);
-        this.velocity = (delta / dt) * 16.67;
-        this.position = pointerEvent[coord];
-        this.time = now;
+    constructor(pe, initOffset = 0) {
+        this.velocity = 0;
+        this.initOffset = initOffset;
+        this.scrollOffset = initOffset;
+        this.eid = ReadingPanel.ScrollOperator.next_id++;
+
+        this.pid = pe.pointerId;
+        this.target = pe.target;
+        try {
+            this.target.setPointerCapture(this.pid);
+        } catch (err) {}
+
+        this.coord = (window._app && window._app.writingMode === 'vertical') ? 'screenX' : 'screenY';
+        this.startPos = pe[this.coord];
+        this.isDrag = false;
+        this.logLastPosition(pe);
+        this.startRenderLoop();
+    }
+
+    logLastPosition(pe) {
+        if (pe.pointerId !== this.pid) return;
+        const parent = this.target.parentElement;
+        const currentPE = { pos: pe[this.coord], time: performance.now() };
+        const moveDist = currentPE.pos - this.startPos;
+        this.scrollOffset = this.initOffset + moveDist;
+        this.isDrag ||= (Math.abs(moveDist) > ReadingPanel.ScrollOperator.dragGap);
+        this.velocity = this.lastPE ? ((currentPE.pos - this.lastPE.pos) * 16 / Math.max(1, currentPE.time - this.lastPE.time)) : 0;
+        this.lastPE = currentPE;
+
+        // 拖曳距離過長時（超過 20 行），在拖曳途中平滑換窗
+        const lineHeight = parent && parent.engine ? parent.engine.lineHeight : 32;
+        if (Math.abs(this.scrollOffset) > 20 * lineHeight) {
+            this.initOffset = parent.commitScroll(this.scrollOffset);
+            this.startPos = currentPE.pos;
+            this.scrollOffset = this.initOffset;
+        }
     }
 
     finish() {
-        if(this.target.hasPointerCapture(this.activePointerId)) {
-            this.target.releasePointerCapture(this.activePointerId);
-        }
+        try {
+            if (this.target.hasPointerCapture(this.pid)) {
+                this.target.releasePointerCapture(this.pid);
+            }
+        } catch (err) {}
     }
 
-    startInertialScroll(totalDisplacement, friction = 0.92) {
-        if (this.inertiaFrameId) {
-            cancelAnimationFrame(this.inertiaFrameId);
-            this.inertiaFrameId = null;
-        }
-
-        let currentV = totalDisplacement * (1 - friction);
+    startRenderLoop() {
+        const parent = this.target.parentElement;
+        const self = ReadingPanel.ScrollOperator;
 
         const loop = () => {
-            if (this.dragging) {
-                this.inertiaFrameId = null;
-                return;
-            }
+            if (self.instance && self.instance.eid !== this.eid) return;
+            const delta = Math.abs(this.velocity);
+            const lineHeight = parent && parent.engine ? parent.engine.lineHeight : 32;
 
-            if (Math.abs(currentV) < 0.5) {
-                this.inertiaFrameId = null;
-                this.commitScroll();
-                return;
-            }
+            if (!parent.dragging && delta) {
+                this.scrollOffset += this.velocity;
+                this.velocity *= self.friction;
 
-            this.scrollOffset += currentV;
-            this.render(false);
-            currentV *= friction;
-
-            // Damping near window edges
-            const renderData = this.engine ? this.engine.getRenderData(this.doc) : null;
-            if (renderData) {
-                const isVert = this.engine.writingMode === 'vertical';
-                const forwardLines = renderData.lines.length - 1 - renderData.zeroIndex;
-                const backwardLines = renderData.zeroIndex;
-                const minScroll = isVert ? -backwardLines * this.engine.lineHeight : -forwardLines * this.engine.lineHeight;
-                const maxScroll = isVert ? forwardLines * this.engine.lineHeight : backwardLines * this.engine.lineHeight;
-
-                if (this.scrollOffset < minScroll || this.scrollOffset > maxScroll) {
-                    currentV *= 0.5;
-                    if (this.scrollOffset < minScroll && this.doc.progress <= (isVert ? 0 : 1)) {
-                        this.scrollOffset = minScroll;
+                // 【方案 2：飛行中動態平滑換窗】
+                // 當慣性位移超過 20 行時，在飛行中平滑 Commit 一次，重置視窗中心
+                if (Math.abs(this.scrollOffset) > 20 * lineHeight) {
+                    const prevOffset = this.scrollOffset;
+                    this.scrollOffset = parent.commitScroll(this.scrollOffset);
+                    // 若已到達整本書的最前端或最後端（無法再推進），給予速度阻尼
+                    if (Math.abs(this.scrollOffset - prevOffset) < 1) {
+                        this.velocity *= 0.5;
                     }
-                    if (this.scrollOffset > maxScroll && this.doc.progress >= (isVert ? 1 : 0)) {
-                        this.scrollOffset = maxScroll;
-                    }
+                }
+
+                if (delta < 0.5) {
+                    self.instance = null;
+                    return parent.commitScroll(this.scrollOffset);
                 }
             }
 
-            this.inertiaFrameId = requestAnimationFrame(loop);
+            parent.render(false, this.scrollOffset);
+            this.inertiaFrameId = (parent.dragging || delta >= 0.5) ? requestAnimationFrame(loop) : null;
         };
 
         this.inertiaFrameId = requestAnimationFrame(loop);
     }
-
-
 };
 
 
