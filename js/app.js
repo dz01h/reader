@@ -44,6 +44,7 @@ class ZenReaderApp {
         // Load and apply saved configuration
         this.loadState();
 
+        /*
         const finput = document.getElementById('file-input');
         if (finput) {
             finput.addEventListener('change', (e) => {
@@ -62,6 +63,7 @@ class ZenReaderApp {
                 reader.readAsText(fileInput.files[0]);
             });
         }
+        */
     }
 
     logError(msg) {

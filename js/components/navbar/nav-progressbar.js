@@ -3,10 +3,11 @@ class NavProgressBar extends Component {
         :host {
             display: block;
             position: relative;
+            box-sizing: border-box;
             min-height: 15px;
             border: 2px solid var(--color-border);
-            touchAction: none;
-            userSelect: none;
+            touch-action: none;
+            user-select: none;
             cursor: pointer;
         }
 
@@ -16,29 +17,34 @@ class NavProgressBar extends Component {
             position: absolute;
             top: 50%;
             left: 50%;
-            transform: translateX(-50%) translateY(-50%);
+            transform: translate(-50%, -50%);
             color: var(--color-text-muted);
             font-size: 80%;
+            pointer-events: none;
         }
 
-        :host nav-progressbar-cursor {
+        nav-progressbar-cursor {
             display: none;
             position: absolute;
             width: 0;
             height: 0;
             top: 50%;
+            pointer-events: none;
         }
 
-        :host nav-progressbar-cursor::after {
+        nav-progressbar-cursor::after {
             content: "";
+            position: relative;
             display: block;
             width: 21px;
             height: 21px;
             border-radius: 50%;
             border: 3px double var(--color-border);
             background: white;
-            transform: translateX(-50%) translateY(-50%);
+            transform: translateY(-50%);
             box-sizing: border-box;
+            right: -11px;
+            left: -11px;
         }
     `;
 
@@ -68,12 +74,8 @@ class NavProgressBar extends Component {
         document.body.addEventListener('ReadingPanelRenderOver', e => {
             if (this.isDragging) return;
             this.progress = e.detail && typeof e.detail.progress === 'number' ? e.detail.progress : 0;
-
-            if(this.cursor.style.display !== 'block') {
-                this.cursor.style.display = 'block';
-                this.updateCursorPosition(this.progress);
-            }
-            
+            this.cursor.style.display = 'block';
+            this.updateCursorPosition(this.progress);
             this.render();
         });
 
@@ -126,8 +128,10 @@ class NavProgressBar extends Component {
 
     handlePointerProgress(e, isCommit = false) {
         const progress = this.getProgressFromEvent(e);
-        // this.render();
+        this.progress = progress;
+        this.cursor.style.display = 'block';
         this.updateCursorPosition(progress);
+        this.render();
         this.dispatchProgress(progress, isCommit);
     }
 
@@ -169,7 +173,7 @@ class NavProgressBar extends Component {
         const direction = isRTL ? 'to left' : 'to right';
 
         this.style.background = `linear-gradient(${direction}, var(--color-primary, #667eea) 0%, var(--color-primary, #667eea) ${pct}, var(--color-border, #e2e8f0) ${pct}, var(--color-border, #e2e8f0) 100%)`;
-
+        this.updateCursorPosition(prog);
     }
 }
 
