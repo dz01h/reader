@@ -1,6 +1,11 @@
 class ZenReaderApp {
 
-    static STATE_KEY = 'reader_status';
+    static STATE_KEY = 'zen_reader_state';
+    static CONFIG_FIELDS = [
+        'theme', 'lang', 'fontSize', 'writingMode', 'fontFamily', 'lineHeight', 'margins', 'wordSpacing',
+        'lastBookId', 'ttsSpeed', 'ttsVoice', 'ttsEngine', 'ttsModel',
+        'quadTL', 'quadTR', 'quadBL', 'quadBR', 'syncCooldown'
+    ];
 
     constructor() {
         window._app = this;
@@ -19,10 +24,12 @@ class ZenReaderApp {
         this.fontFamily = 'sans-serif';
         this.lineHeight = 1.8;
         this.margins = { top: 30, bottom: 30, left: 30, right: 30 };
+        this.wordSpacing = 1;
         this.lastBookId = null;
         this.ttsSpeed = 1.0;
         this.ttsVoice = 'zh_CN-huayan-medium';
         this.ttsEngine = 'piper';
+        this.ttsModel = '';
 
         // Touch Quadrants
         this.quadTL = 'prev';
@@ -32,95 +39,29 @@ class ZenReaderApp {
 
         this.syncCooldown = 15; // default 15 minutes
         this.lastSyncTime = 0;
-
-        // this.STATE_KEY = 'zen_reader_state';
         this.currentBook = null;
 
-        /*
-        const main = document.querySelector('#main-content');
-        const readerPanel = new ReadingPanel(this, main);
-
-        */
-
-        // for(let c of document.querySelectorAll('[component]')) {
-        //     console.log(c);
-        //     new window[c.getAttribute('component')](this, c);
-        // }
+        // Load and apply saved configuration
+        this.loadState();
 
         const finput = document.getElementById('file-input');
-        finput.addEventListener('change', (e) => {
-            const fileInput = e.target;
-            if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
-            // reade text from file
+        if (finput) {
+            finput.addEventListener('change', (e) => {
+                const fileInput = e.target;
+                if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const textContent = e.target.result;
-                console.log("Loaded text content:", textContent.length, 'words', textContent.substring(0, 100));
-                // readerPanel.read(new ReadingDocument(textContent));
-                document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: {
-                    action: 'read',
-                    params: [new ReadingDocument(textContent)]
-                } }))
-            };
-
-              // 6. Read the file as plain text
-            reader.readAsText(fileInput.files[0]);
-
-        });
-
-
-        // // Ensure dependencies are loaded
-        // if (!window.ZenDB || !window.ZenEngine || !window.ReadingPanel || !window.ZenTTS) {
-        //     console.error("Required module classes (ZenDB, ZenEngine, ReadingPanel, ZenTTS) are missing!");
-        //     return;
-        // }
-
-        // // Initialize internal modules
-        // if (window.I18n) {
-        //     this.i18n = new window.I18n();
-        // }
-
-        // this.db = new window.ZenDB();
-
-        // this.initDOM();
-
-        // // Initialize Core Components
-        // this.readingPanel = new window.ReadingPanel(this, this.els.canvas);
-        // this.engine = this.readingPanel.engine;
-        // this.tts = new window.ZenTTS(this);
-
-        // // GDrive module
-        // if (window.ZenGDrive) {
-        //     this.gdrive = new window.ZenGDrive(this);
-        // }
-
-        // // Reading Progress Sync
-        // if (window.ZenReadingLog) {
-        //     this.readingLog = new window.ZenReadingLog(this.gdrive);
-        // }
-
-        // // Settings Dialog module
-        // if (window.ZenSettings) {
-        //      this.settings = new window.ZenSettings(this);
-        // }
-
-        // // File Explorer module
-        // if (window.FileExplorer) {
-        //      this.explorer = new window.FileExplorer(this);
-        // }
-
-        // // Zip Handler module
-        // if (window.ZenZipHandler) {
-        //      this.zipHandler = new window.ZenZipHandler(this);
-        // }
-
-        // this.bindEvents();
-        // this.loadState();
-        // this.handleURLSync();
-
-        // // Listen for remote progress signal from GAS
-        // document.body.addEventListener('readingLog', (e) => this.handleRemoteProgress(e.detail));
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const textContent = e.target.result;
+                    console.log("Loaded text content:", textContent.length, 'words', textContent.substring(0, 100));
+                    document.body.dispatchEvent(new CustomEvent('ReadingOperation', { detail: {
+                        action: 'read',
+                        params: [new ReadingDocument(textContent)]
+                    } }));
+                };
+                reader.readAsText(fileInput.files[0]);
+            });
+        }
     }
 
     logError(msg) {
@@ -157,22 +98,35 @@ class ZenReaderApp {
         };
     }
 
-    async loadState() {
-        const savedState = localStorage.getItem(this.STATE_KEY);
-        if (savedState) {
-            try {
-                const state = JSON.parse(savedState);
-                Object.assign(this, state);
-            } catch (e) {
-                console.error("Local storage error:", e);
+    loadState() {
+        try {
+            const raw = localStorage.getItem(ZenReaderApp.STATE_KEY) || localStorage.getItem('reader_status');
+            if (raw) {
+                const state = JSON.parse(raw);
+                for (const k of ZenReaderApp.CONFIG_FIELDS) {
+                    if (state[k] !== undefined) {
+                        if (k === 'margins' && typeof state[k] === 'object' && state[k] !== null) {
+                            this.margins = { ...this.margins, ...state[k] };
+                        } else {
+                            this[k] = state[k];
+                        }
+                    }
+                }
             }
+        } catch (e) {
+            console.error("Local storage error:", e);
         }
+        this.applyState();
     }
 
+    loadConfig() {
+        return this.loadState();
+    }
 
-    async applyState() {
+    applyState() {
         document.documentElement.setAttribute('data-theme', this.theme || 'dark');
         document.documentElement.setAttribute('data-writing-mode', this.writingMode || 'horizontal');
+        document.documentElement.setAttribute('lang', this.lang || 'zh-TW');
 
         if (this.i18n && this.lang) {
             this.i18n.setLanguage(this.lang);
@@ -180,42 +134,17 @@ class ZenReaderApp {
             this.i18n.updateDOM();
         }
 
-        if (this.ttsEngine && this.tts) {
-            this.tts.switchEngine(this.ttsEngine);
+        const readingPanel = document.querySelector('reading-panel');
+        if (readingPanel && typeof readingPanel.updateConfig === 'function') {
+            readingPanel.updateConfig({
+                fontSize: this.fontSize,
+                fontFamily: this.fontFamily,
+                lineHeightRatio: this.lineHeight,
+                margins: this.margins,
+                writingMode: this.writingMode,
+                wordSpacing: this.wordSpacing
+            });
         }
-
-        let book = null;
-        if (this.lastBookId && window.ZenOPFS) {
-            const text = await window.ZenOPFS.loadFile(this.lastBookId);
-            if (text && window.ZenBook) {
-                book = new window.ZenBook(this.lastBookId, text);
-                book.loadProgress();
-            }
-        }
-
-        // Fallback: If no lastBookId but there is a recent book, pick the most recent one
-        if (!book && window.ZenOPFS) {
-            const opfsFiles = await window.ZenOPFS.listFiles();
-            if (opfsFiles && opfsFiles.length > 0) {
-                const recentFile = opfsFiles[0].name;
-                const text = await window.ZenOPFS.loadFile(recentFile);
-                if (text && window.ZenBook) {
-                    this.lastBookId = recentFile;
-                    book = new window.ZenBook(recentFile, text);
-                    book.loadProgress();
-                }
-            }
-        }
-
-        if (book) {
-            this.loadBookIntoReader(book);
-            this.showToast('已恢復上次閱讀的書籍');
-        } else if (typeof this.closeReader === 'function') {
-            this.closeReader();
-        }
-
-        if (typeof this.updateThemeColor === 'function') this.updateThemeColor();
-        if (typeof this.updateGoogleUIState === 'function') this.updateGoogleUIState();
     }
 
     saveState(updates) {
@@ -224,10 +153,18 @@ class ZenReaderApp {
         }
 
         try {
-            localStorage.setItem(ZenReaderApp.STATE_KEY, JSON.stringify(this));
+            const state = {};
+            for (const k of ZenReaderApp.CONFIG_FIELDS) {
+                state[k] = this[k];
+            }
+            localStorage.setItem(ZenReaderApp.STATE_KEY, JSON.stringify(state));
         } catch (e) {
             console.error("Save state error:", e);
         }
+    }
+
+    saveConfig(updates) {
+        return this.saveState(updates);
     }
 
     saveProgress() {

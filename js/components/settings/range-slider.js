@@ -161,11 +161,10 @@ class RangeSlider extends Component {
             queueMicrotask(() => { this.dispatchEvent(event); });
             this.fireEvent('settingUpdated', {
                 field: this.getAttribute('field'),
-                value: this._value
+                value: this._value,
+                isCommit: !!triggerChange
             }, true);
         }
-
-
 
         return changed;
     }
@@ -247,7 +246,7 @@ class RangeSlider extends Component {
         this.activePointerId = null;
         this.classList.remove('active');
 
-        this.dispatchEvent(new CustomEvent('change', { detail: { value: this._value }, bubbles: true }));
+        this.handleMove(e.clientX || 0, true);
         this.dispatchEvent(new CustomEvent('sliderend', { bubbles: true }));
     }
 }

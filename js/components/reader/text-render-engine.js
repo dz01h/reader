@@ -4,7 +4,7 @@ class TextRenderEngine {
         this.height = options.height || 600;
         this.fontSize = options.fontSize || 18;
         this.fontFamily = options.fontFamily || 'sans-serif';
-        this.lineHeightRatio = options.lineHeightRatio || 2.0;
+        this.lineHeightRatio = options.lineHeightRatio || options.lineHeight || 1.8;
         this.margins = options.margins || { top: 30, bottom: 30, left: 30, right: 30 };
         this.writingMode = options.writingMode || 'horizontal'; // 'horizontal' | 'vertical'
 
@@ -97,6 +97,7 @@ class TextRenderEngine {
         if (options.fontSize !== undefined) this.fontSize = options.fontSize;
         if (options.fontFamily !== undefined) this.fontFamily = options.fontFamily;
         if (options.lineHeightRatio !== undefined) this.lineHeightRatio = options.lineHeightRatio;
+        else if (options.lineHeight !== undefined) this.lineHeightRatio = options.lineHeight;
         if (options.margins !== undefined) this.margins = { ...this.margins, ...options.margins };
         if (options.writingMode !== undefined) this.writingMode = options.writingMode;
         if (options.dpr !== undefined) this.dpr = options.dpr;
@@ -334,10 +335,16 @@ class TextRenderEngine {
         const height = options.height !== undefined ? options.height : this.height;
         const fontSize = options.fontSize !== undefined ? options.fontSize : this.fontSize;
         const fontFamily = options.fontFamily !== undefined ? options.fontFamily : this.fontFamily;
-        const lineHeightRatio = options.lineHeightRatio !== undefined ? options.lineHeightRatio : this.lineHeightRatio;
+        const lineHeightRatio = options.lineHeightRatio !== undefined
+            ? options.lineHeightRatio
+            : (options.lineHeight !== undefined ? options.lineHeight : this.lineHeightRatio);
         const margins = options.margins !== undefined ? { ...this.margins, ...options.margins } : this.margins;
         const writingMode = options.writingMode !== undefined ? options.writingMode : this.writingMode;
-        const textColor = options.textColor || '#ffffff';
+        let defaultTextColor = '#ffffff';
+        if (typeof document !== 'undefined') {
+            defaultTextColor = getComputedStyle(document.body).getPropertyValue('--color-text').trim() || '#ffffff';
+        }
+        const textColor = options.textColor || defaultTextColor;
         const wordSpacing = options.wordSpacing !== undefined ? options.wordSpacing : (this.wordSpacing || 0);
 
         const isVert = writingMode === 'vertical';

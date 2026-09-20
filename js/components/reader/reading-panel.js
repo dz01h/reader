@@ -88,6 +88,28 @@ class ReadingPanel extends Component {
         this.render(true);
     }
 
+    updateConfig(options = {}) {
+        if (!this.canvas || !window._app) return;
+        const app = window._app;
+        const config = {
+            fontSize: app.fontSize ?? 18,
+            fontFamily: app.fontFamily ?? 'sans-serif',
+            lineHeightRatio: app.lineHeight ?? 1.8,
+            margins: app.margins ?? { top: 30, bottom: 30, left: 30, right: 30 },
+            writingMode: app.writingMode ?? 'horizontal',
+            wordSpacing: app.wordSpacing ?? 1,
+            ...options
+        };
+
+        if (this.engine) {
+            this.engine.updateConfig(config);
+            this.engine.updateSize(this.canvas);
+        } else {
+            this.resize();
+        }
+        this.render(true);
+    }
+
     snapToGrid(val) {
         return this.engine ? this.engine.snap(val) : val;
     }
@@ -113,16 +135,20 @@ class ReadingPanel extends Component {
         }
     }
 
-    render(stable = false, offset = 0) {
+    render(stable = false, offset = 0, options = {}) {
         if (!this.doc || !this.engine) return;
+
+        const op = {
+            showMargins: document.body.classList.contains('settings-interacting')
+        };
+
+        for(let k in options) op[k] = options[k];
 
         this.engine.render(
             this.ctx,
             this.doc,
             offset,
-            {
-                showMargins: document.body.classList.contains('settings-interacting')
-            }
+            op
         );
 
         // Fire ReadingPanelRenderOver event with visible text ONLY when stable (debounced / committed)

@@ -223,7 +223,8 @@ class ListSelector extends Component {
             this.fireEvent('input', { value: this._value }, true);
             this.fireEvent('settingUpdated', {
                 field: this.getAttribute('field'),
-                value: this._value
+                value: this._value,
+                isCommit: true
             }, true);
         }
 
