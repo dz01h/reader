@@ -127,6 +127,49 @@ class FilePanel extends Component {
             background-color: rgba(239, 68, 68, 0.1);
         }
 
+        .breadcrumbs-bar {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.4rem 0.75rem;
+            background-color: rgba(102, 126, 234, 0.06);
+            border: 1px solid var(--color-border, #e2e8f0);
+            border-radius: var(--radius-md, 8px);
+            font-size: 0.85rem;
+            color: var(--color-text-muted, #718096);
+            overflow-x: auto;
+            white-space: nowrap;
+            box-sizing: border-box;
+        }
+
+        .breadcrumb-item {
+            cursor: pointer;
+            color: var(--color-primary, #667eea);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            transition: color 0.15s ease;
+        }
+
+        .breadcrumb-item:hover {
+            text-decoration: underline;
+        }
+
+        .breadcrumb-item.current {
+            color: var(--color-text, #2d3748);
+            cursor: default;
+            font-weight: 600;
+        }
+
+        .breadcrumb-item.current:hover {
+            text-decoration: none;
+        }
+
+        .breadcrumb-separator {
+            color: var(--color-text-muted, #a0aec0);
+            user-select: none;
+        }
+
         .empty-state, .loading-state {
             display: flex;
             flex-direction: column;
@@ -153,6 +196,15 @@ class FilePanel extends Component {
     }
 
     connectedCallback() {
+        if (!this._fileSourceChangedBound && typeof document !== 'undefined' && document.body) {
+            this._fileSourceChangedBound = true;
+            document.body.addEventListener('fileSourceChanged', (e) => {
+                if (this.source && this.source.id === e.detail?.source) {
+                    this.refresh();
+                }
+            });
+        }
+
         if (!this.source) {
             this.setSource(new window.OPFSFileSource());
         } else {
@@ -215,17 +267,56 @@ class FilePanel extends Component {
     renderList() {
         this.container.innerHTML = '';
 
+        // 1. Render Breadcrumbs Bar if navigated inside subfolders
+        if (this.source && this.source.path && this.source.path.length > 0) {
+            const breadcrumbsEl = document.createElement('div');
+            breadcrumbsEl.className = 'breadcrumbs-bar';
+
+            const rootItem = document.createElement('span');
+            rootItem.className = 'breadcrumb-item';
+            rootItem.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> 根目錄`;
+            rootItem.addEventListener('click', async () => {
+                await this.source.navigate('root');
+                await this.refresh();
+            });
+            breadcrumbsEl.appendChild(rootItem);
+
+            this.source.path.forEach((seg, idx) => {
+                const sep = document.createElement('span');
+                sep.className = 'breadcrumb-separator';
+                sep.textContent = '/';
+                breadcrumbsEl.appendChild(sep);
+
+                const isLast = idx === this.source.path.length - 1;
+                const segEl = document.createElement('span');
+                segEl.className = isLast ? 'breadcrumb-item current' : 'breadcrumb-item';
+                segEl.textContent = seg.name || seg.id;
+
+                if (!isLast) {
+                    segEl.addEventListener('click', async () => {
+                        await this.source.navigate(seg.id, idx, seg.name);
+                        await this.refresh();
+                    });
+                }
+
+                breadcrumbsEl.appendChild(segEl);
+            });
+
+            this.container.appendChild(breadcrumbsEl);
+        }
+
         if (!this.items || this.items.length === 0) {
-            this.container.innerHTML = `
-                <div class="empty-state">
-                    <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
-                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
-                    </svg>
-                    <span data-i18n="emptyLibrary">目前書庫中沒有任何書籍</span>
-                    <small style="opacity: 0.7;">點擊上方「開啟檔案」加入文字檔或 EPUB</small>
-                </div>
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'empty-state';
+            emptyEl.innerHTML = `
+                <svg class="empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+                </svg>
+                <span data-i18n="emptyLibrary">此資料夾沒有書籍檔案</span>
+                <small style="opacity: 0.7;">可由本機或雲端加入檔案</small>
             `;
+            this.container.appendChild(emptyEl);
             return;
         }
 
@@ -293,15 +384,27 @@ class FilePanel extends Component {
 
     async handleItemClick(item) {
         if (item.type === 'folder') {
-            await this.source.navigate(item.id);
+            await this.source.navigate(item.id, -1, item.name);
             await this.refresh();
             return;
         }
 
+        const explorer = this.closest('explorer-panel') || (this.getRootNode && this.getRootNode().host?.closest?.('explorer-panel'));
+        if (explorer && typeof explorer.openFile === 'function') {
+            try {
+                await explorer.openFile(item, this.source);
+            } catch (err) {
+                console.error('Failed to open file via ExplorerPanel:', err);
+                alert(`無法開啟檔案：${err.message}`);
+            }
+            return;
+        }
+
+        // Fallback standalone opening
         try {
             const content = await this.source.loadFile(item);
             if (content && window.ReadingDocument) {
-                const doc = new window.ReadingDocument(content);
+                const doc = new window.ReadingDocument(content, item.name || item.id, this.source?.id || 'opfs');
                 if (typeof item.progress === 'number' && item.progress > 0) {
                     doc.setProgress(item.progress);
                 }
@@ -313,14 +416,12 @@ class FilePanel extends Component {
                     }
                 }
 
-                document.body.dispatchEvent(new CustomEvent('ReadingOperation', {
-                    detail: {
-                        action: 'read',
-                        params: [doc]
-                    }
-                }));
+                this.fireEvent('ReadingOperation', {
+                    action: 'read',
+                    params: [doc]
+                }, true);
 
-                this.fireEvent('fileSelected', { item, source: this.source }, true);
+                this.fireEvent('fileSelected', { item, source: this.source, doc }, true);
 
                 // Close parent dialog if present
                 const dialog = this.parentElement || this.closest?.('dialog');

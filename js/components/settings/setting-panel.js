@@ -10,24 +10,6 @@ class SettingPanel extends Component {
     }
 
     initComponent() {
-        // 1. Header
-        const header = document.createElement('div');
-        header.className = 'dialog-header';
-        header.innerHTML = `
-            <button id="btn-close-settings" class="btn-close" data-i18n="title:close" title="關閉">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
-            <h2 data-i18n="settingsTitle">閱讀設定</h2>
-            <div style="width: 24px;"></div>
-        `;
-        this.prepend(header);
-        header.querySelector('.btn-close').addEventListener('click', e => {
-            const dialog = this.parentElement || this.closest?.('dialog');
-            if (dialog && typeof dialog.close === 'function') {
-                dialog.close();
-            }
-        });
-
         this.bindParentDialog();
         this.addEventListener('settingUpdated', e => { this.syncValue(e); });
 

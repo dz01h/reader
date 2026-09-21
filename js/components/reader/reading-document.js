@@ -1,6 +1,8 @@
 class ReadingDocument {
-    constructor(text = "") {
+    constructor(text = "", title = "", source = "") {
         this.text = text || "";
+        this.title = title || "";
+        this.source = source || "";
         this.chapters = [];
         this.progress = 0.0; // 0.0 ~ 1.0 (Single Source of Truth)
         this.timestamp = Date.now();
@@ -9,9 +11,13 @@ class ReadingDocument {
     /**
      * Set new raw text and reset reading state
      * @param {string} text 
+     * @param {string} [title]
+     * @param {string} [source]
      */
-    setText(text) {
+    setText(text, title = this.title, source = this.source) {
         this.text = text || "";
+        this.title = title || "";
+        this.source = source || "";
         this.chapters = [];
         this.progress = 0.0;
         this.timestamp = Date.now();

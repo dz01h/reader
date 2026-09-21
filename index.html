@@ -84,6 +84,7 @@
 
     <dialog id="settings-dialog" class="settings-dialog">
         <setting-panel>
+            <dialog-header data-i18n="settingsTitle"></dialog-header>
             <list-selector field="lang" value="zh-TW" data-i18n="settingLanguage">
                 {
                     "zh-TW": "繁體中文 (Taiwan)",
@@ -153,10 +154,10 @@
 
     <dialog id="file-explorer-dialog" class="settings-dialog">
         <explorer-panel>
-            <div class="source-buttons">
-                <action-button class="icon-btn active" id="btn-recent-books" action="load-recent-books" data-i18n="title:btnRecentBooks">
+            <dialog-header data-i18n="filedialogTitle">
+                <opfs-file-source class="icon-btn" id="btn-recent-books" checked>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                </action-button>
+                </opfs-file-source>
                 <span class="source-divider"></span>
                 <action-button class="icon-btn" id="btn-upload" data-i18n="title:btnSelectLocal" action="load-local-files">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
@@ -164,7 +165,7 @@
                 <action-button class="icon-btn" id="btn-gdrive" data-i18n="title:btnGDrive" title="由 Google Drive 載入"  action="load-gdrive-files">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22.06 15.81l-3.26-5.63A2 2 0 0 0 17.06 9H6.94a2 2 0 0 0-1.74 1.18L1.94 15.81A2 2 0 0 0 3.67 19h16.66a2 2 0 0 0 1.73-3.19z"></path><path d="M12 3L1.94 15.81"></path><path d="M6.94 9h15.12"></path></svg>
                 </action-button>
-            </div>
+            </dialog-header>
             <file-panel></file-panel>
         </explorer-panel>
     </dialog>
@@ -189,9 +190,11 @@
     <script src="js/components/component.js"></script>
     <script src="js/components/navbar/nav-progressbar.js"></script>
     <script src="js/components/reader/reading-panel.js"></script>
+    <script src="js/components/action-button.js"></script>
+    <script src="js/components/toggle-button.js"></script>
+    <script src="js/components/dialog-header.js"></script>
     <script src="js/components/settings/range-slider.js"></script>
     <script src="js/components/settings/list-selector.js"></script>
-    <script src="js/components/settings/action-button.js"></script>
     <script src="js/components/settings/quad-actions.js"></script>
     <script src="js/components/settings/setting-panel.js"></script>
     <script src="js/components/explorer/file-source.js"></script>

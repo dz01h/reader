@@ -5,6 +5,54 @@
 class OPFSFileSource extends (window.FileSource || class {}) {
     constructor() {
         super('opfs', '已存書籍');
+        OPFSFileSource.bindGlobalEvents();
+    }
+
+    /**
+     * Bind global listener for ReadingOperation to automatically persist read documents
+     */
+    static bindGlobalEvents() {
+        if (typeof document === 'undefined' || !document.body || document.body._opfsGlobalBound) return;
+        document.body._opfsGlobalBound = true;
+
+        document.body.addEventListener('ReadingOperation', async (e) => {
+            if (e.detail && e.detail.action === 'read' && Array.isArray(e.detail.params) && e.detail.params[0]) {
+                const doc = e.detail.params[0];
+                await OPFSFileSource.handleReadDocument(doc);
+            }
+        });
+    }
+
+    /**
+     * Automatically persist an incoming ReadingDocument into OPFS if it's from an external source
+     * @param {ReadingDocument} doc 
+     */
+    static async handleReadDocument(doc) {
+        if (!doc || !doc.text || !window.ZenOPFS) return;
+        // Do not re-save documents already originating from OPFS
+        if (doc.source === 'opfs') return;
+
+        const filename = doc.title;
+        if (!filename || filename === 'document.txt') return;
+
+        try {
+            await window.ZenOPFS.saveFile(filename, doc.text);
+            console.log(`[OPFSFileSource] 已透過 read(doc) 自動存入 OPFS: ${filename}`);
+
+            if (window._app && typeof window._app.showToast === 'function') {
+                window._app.showToast(`已加入離線書庫: ${filename}`);
+            }
+
+            // Notify file panels to refresh if they are currently displaying OPFS
+            if (typeof document !== 'undefined' && document.body) {
+                const event = typeof CustomEvent !== 'undefined' 
+                    ? new CustomEvent('fileSourceChanged', { detail: { source: 'opfs', filename: filename } })
+                    : { type: 'fileSourceChanged', detail: { source: 'opfs', filename: filename } };
+                document.body.dispatchEvent(event.type || 'fileSourceChanged', event);
+            }
+        } catch (err) {
+            console.warn('[OPFSFileSource] 自動存入 OPFS 失敗:', err);
+        }
     }
 
     /**
@@ -118,3 +166,5 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { OPFSFileSource };
 }
+
+customElements.define('opfs-file-source', OPFSFileSource);

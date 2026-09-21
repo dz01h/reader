@@ -53,6 +53,9 @@ const translations = {
         btnOpenReadingLog: '開啟 Reading Log 編輯',
         clearCache: '清除所有快取 (Clear Cache)',
         btnGasAuth: '重新授權 reader gas api',
+
+        filedialogTitle: '書籍庫',
+
         gdriveFetchingToken: '正在取得 Google 授權令牌...',
         gdriveLoginFail: 'Google 登入或授權失敗！',
         gdriveFetching: '正在讀取 Google Drive 檔案清單...',

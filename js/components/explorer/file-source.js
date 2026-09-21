@@ -2,11 +2,23 @@
  * FileSource Base Class
  * Abstract interface / parent object for file listing and document loading data sources.
  */
-class FileSource {
+class FileSource extends ToggleButton {
     constructor(id = 'source', name = 'Source') {
+        super();
         this.id = id;
         this.name = name;
         this.path = []; // Breadcrumb path: [{ id: string, name: string }]
+    }
+
+    initComponent() {
+        super.initComponent();
+        this.classList.add('file-source');
+        this.action = 'FilePanel:toggleSource';
+        this.switching.setAttribute('name', 'filepanel-sources');
+    }
+
+    static getInstance() {
+        return document.querySelector('.file-source:has(:checked)');
     }
 
     /**
@@ -50,11 +62,13 @@ class FileSource {
      * @param {string} folderId Target folder ID or 'root'
      * @param {number} [depth] Breadcrumb depth index (-1 for automatic)
      */
-    async navigate(folderId, depth = -1) {
+    async navigate(folderId, depth = -1, name = '') {
         if (folderId === 'root') {
             this.path = [];
         } else if (depth >= 0 && depth < this.path.length) {
-            this.path = this.path.slice(0, depth);
+            this.path = this.path.slice(0, depth + 1);
+        } else {
+            this.path.push({ id: folderId, name: name || folderId });
         }
     }
 
