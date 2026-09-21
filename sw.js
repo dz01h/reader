@@ -1,17 +1,21 @@
-const CACHE_NAME = 'zen-reader-v36';
+const CACHE_NAME = 'zen-reader-v37';
 const urlsToCache = [
   './',
   './index.html',
   './css/style.css',
   './manifest.json',
   './icon.svg',
-  './js/db.js',
-  './js/i18n.js',
+  './js/services/opfs.js',
+  './js/services/db.js',
+  './js/services/gdrive.js',
+  './js/services/reading-log.js',
+  './js/utils/i18n.js',
+  './js/utils/zip-handler.js',
+  './js/utils/google-auth-helper.js',
+  './js/book.js',
   './js/engine.js',
   './js/settings.js',
   './js/file-explorer.js',
-  './js/zip-handler.js',
-  './js/gdrive.js',
   './js/app.js',
   './js/tts.js',
   './js/tts/chunks.js',
@@ -23,7 +27,6 @@ const urlsToCache = [
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js',
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort-wasm-simd-threaded.wasm',
   'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort-wasm-simd.wasm',
-
 ];
 
 self.addEventListener('install', event => {

@@ -2,12 +2,16 @@ import { Action } from './actions/action.js';
 import { ActionQuadClick } from './actions/quad-click.js';
 import { OpenSettingDialog } from './actions/open-setting-dialog.js';
 import { ActionFilepanelSort } from './actions/filepanel-sort.js';
+import { ActionGoogleGetToken } from './actions/google-get-token.js';
+import { ActionGoogleLogin } from './actions/google-login.js';
 
 // 註冊 actions 資料夾中的模組清單
 const actionModules = [
     { name: 'quad-click', module: { ActionQuadClick } },
     { name: 'open-setting-dialog', module: { OpenSettingDialog } },
-    { name: 'filepanel-sort', module: { ActionFilepanelSort } }
+    { name: 'filepanel-sort', module: { ActionFilepanelSort } },
+    { name: 'google-get-token', module: { ActionGoogleGetToken } },
+    { name: 'google-login', module: { ActionGoogleLogin } }
 ];
 
 export class ActionLoader {
