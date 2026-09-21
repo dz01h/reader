@@ -1,11 +1,13 @@
 import { Action } from './actions/action.js';
 import { ActionQuadClick } from './actions/quad-click.js';
 import { OpenSettingDialog } from './actions/open-setting-dialog.js';
+import { ActionFilepanelSort } from './actions/filepanel-sort.js';
 
 // 註冊 actions 資料夾中的模組清單
 const actionModules = [
     { name: 'quad-click', module: { ActionQuadClick } },
-    { name: 'open-setting-dialog', module: { OpenSettingDialog } }
+    { name: 'open-setting-dialog', module: { OpenSettingDialog } },
+    { name: 'filepanel-sort', module: { ActionFilepanelSort } }
 ];
 
 export class ActionLoader {

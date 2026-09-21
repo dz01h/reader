@@ -192,6 +192,8 @@ class FilePanel extends Component {
         this.source = null;
         this.items = [];
         this.isLoading = false;
+        this.sortField = 'name';
+        this.sortOrder = 'ASC';
         this.initComponent();
     }
 
@@ -228,6 +230,39 @@ class FilePanel extends Component {
         this.refresh();
     }
 
+    setSort(field = 'name', order = 'ASC') {
+        this.sortField = field;
+        this.sortOrder = (order || 'ASC').toUpperCase();
+        this.sortItems();
+        this.renderList();
+    }
+
+    sortItems() {
+        if (!this.items || this.items.length === 0) return;
+        const field = this.sortField || 'name';
+        const isAsc = (this.sortOrder || 'ASC') === 'ASC';
+
+        this.items.sort((a, b) => {
+            // Folders always at top
+            if (a.type === 'folder' && b.type !== 'folder') return -1;
+            if (a.type !== 'folder' && b.type === 'folder') return 1;
+
+            let result = 0;
+            if (field === 'name') {
+                result = (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+            } else if (field === 'date') {
+                const timeA = a.progressTimestamp || a.lastModified || 0;
+                const timeB = b.progressTimestamp || b.lastModified || 0;
+                result = timeA - timeB;
+            } else if (field === 'size') {
+                const sizeA = a.size || 0;
+                const sizeB = b.size || 0;
+                result = sizeA - sizeB;
+            }
+            return isAsc ? result : -result;
+        });
+    }
+
     async refresh() {
         if (!this.source || !this.container) return;
 
@@ -236,6 +271,7 @@ class FilePanel extends Component {
 
         try {
             this.items = await this.source.listFiles();
+            this.sortItems();
         } catch (err) {
             console.error('FilePanel list error:', err);
             this.items = [];

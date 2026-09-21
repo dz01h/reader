@@ -94,6 +94,10 @@
     background-color: #dc2626;
 }
 
+.toggle-button {
+    position: relative;
+}
+
 .toggle-button > input {
     display: none;
 }
@@ -101,6 +105,46 @@
 .toggle-button:has(input:checked) {
     transform: scale(0.98);
     background-color: rgba(102, 126, 234, 0.15);
+}
+
+[value="ASC" i]::after,
+.toggle-button[value="ASC" i]::after {
+    content: "";
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23667eea' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='18 15 12 9 6 15'%3E%3C/polyline%3E%3C/svg%3E");
+    pointer-events: none;
+}
+
+[value="DESC" i]::after,
+.toggle-button[value="DESC" i]::after {
+    content: "";
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 12px;
+    height: 12px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23667eea' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    pointer-events: none;
+}
+
+[data-theme="dark"] [value="ASC" i]::after,
+[data-theme="dark"] .toggle-button[value="ASC" i]::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23818cf8' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='18 15 12 9 6 15'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+[data-theme="dark"] [value="DESC" i]::after,
+[data-theme="dark"] .toggle-button[value="DESC" i]::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23818cf8' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
 }
 
 setting-panel,
@@ -1251,3 +1295,19 @@ body.drag-over::after {
     border-color: var(--color-primary-hover);
 }
 
+.file-source-list {
+    display: flex;
+    flex: 1;
+    height: 2.5rem;
+    margin: 0.25rem 0;
+}
+
+.file-source-list > * {
+    flex: 1;
+}
+
+.file-source-sort {
+    display: flex;
+    height: 2.5rem;
+    margin: 0.25rem 0;
+}
