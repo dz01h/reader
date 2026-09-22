@@ -5,6 +5,11 @@ class GDriveModule {
         this.expiresAt = 0;
         this.currentPath = []; // Array of {id, name}
 
+        document.body.addEventListener('GoogleApiReady', (e) => {
+            this.accessToken = e.detail?.accessToken || e.detail?.token || null;
+            this.expiresAt = e.detail?.expiresAt || 0;
+        });
+
         // Load cached token
         const cached = localStorage.getItem('gdrive_auth');
         if (cached) {
@@ -26,35 +31,32 @@ class GDriveModule {
             return true;
         }
 
-        // Try to reload from localStorage first
-        const cached = localStorage.getItem('gdrive_auth');
-        if (cached) {
-            try {
-                const auth = JSON.parse(cached);
-                if (auth.expiresAt > Date.now()) {
-                    this.accessToken = auth.accessToken;
-                    this.expiresAt = auth.expiresAt;
-                    return true;
-                }
-            } catch(e) {}
-        }
-
-        // If we are online, try silent refresh via iframe
-        if (navigator.onLine) {
-            try {
-                const gasUrl = 'https://script.google.com/macros/s/AKfycbz-93PY978YMvbZKH7-RDJNsSJVWISnDVkD4ESSvG5bGudMzAUPMagwqB2sJBZwIJ9nWQ/exec?token=' + encodeURIComponent(location.origin);
-                const data = await this.authSilent(gasUrl);
-                if (data && data.access_token) {
-                    // Tokens are already saved to this and localStorage via handleAuthMessage
-                    return true;
-                }
-            } catch(e) {}
+        if (window.GoogleAuthHelper && typeof window.GoogleAuthHelper.requestGoogleToken === 'function') {
+            const token = await window.GoogleAuthHelper.requestGoogleToken();
+            if (token) {
+                this.accessToken = token;
+                return true;
+            }
         }
 
         return false;
     }
 
     async getAccessToken() {
+        if (window.GoogleAuthHelper && typeof window.GoogleAuthHelper.getStoredGoogleToken === 'function') {
+            const token = window.GoogleAuthHelper.getStoredGoogleToken();
+            if (token) {
+                this.accessToken = token;
+                return token;
+            }
+        }
+        if (window.GoogleAuthHelper && typeof window.GoogleAuthHelper.requestGoogleToken === 'function') {
+            const token = await window.GoogleAuthHelper.requestGoogleToken();
+            if (token) {
+                this.accessToken = token;
+                return token;
+            }
+        }
         if (await this.ensureAuth()) {
             return this.accessToken;
         }

@@ -32,8 +32,8 @@ export class ActionGoogleLogin extends Action {
             const token = data?.access_token || data?.accessToken;
             if (token) {
                 console.log('[GoogleLogin] Google 登入成功');
-                saveGoogleToken(data);
-                dispatchGoogleApiReady(token, data);
+                const authObj = saveGoogleToken(data);
+                dispatchGoogleApiReady(token, authObj);
                 if (window._app && typeof window._app.showToast === 'function') {
                     window._app.showToast('Google 登入授權成功！');
                 }

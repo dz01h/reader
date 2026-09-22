@@ -251,7 +251,19 @@ class ZenReaderApp {
     loadBookIntoReader(book) {
         this.currentBook = book;
         this.saveState({ lastBookId: book.filename });
-        this.els.documentTitle.textContent = book.filename;
+        if (this.els?.documentTitle) {
+            this.els.documentTitle.textContent = book.filename;
+        }
+
+        if (book.content && window.ReadingDocument) {
+            const doc = new window.ReadingDocument(book.content, book.filename);
+            if (book.progress) doc.setProgress(book.progress);
+            document.body.dispatchEvent(new CustomEvent('ReadingOperation', {
+                detail: { action: 'read', params: [doc] },
+                bubbles: true
+            }));
+            return;
+        }
 
         if (book.content) {
             this.parseTOC(book.content);
@@ -266,10 +278,10 @@ class ZenReaderApp {
         document.body.classList.remove('ui-hidden');
         this.updateThemeColor();
 
-        this.els.dropZone.classList.add('hidden');
-        this.els.readerContainer.classList.remove('hidden');
-        this.els.headerCenter.classList.remove('hidden');
-        this.els.btnCloseReader.classList.remove('hidden');
+        if (this.els?.dropZone) this.els.dropZone.classList.add('hidden');
+        if (this.els?.readerContainer) this.els.readerContainer.classList.remove('hidden');
+        if (this.els?.headerCenter) this.els.headerCenter.classList.remove('hidden');
+        if (this.els?.btnCloseReader) this.els.btnCloseReader.classList.remove('hidden');
 
         if (!history.state || history.state.reading !== true) {
             history.pushState({ reading: true }, '', '#reading');
@@ -595,16 +607,49 @@ class ZenReaderApp {
         const toast = document.getElementById('toast');
         if (!toast) return;
         toast.textContent = msg;
-        toast.classList.add('show');
+        if (typeof toast.showPopover === 'function') {
+            try {
+                if (!toast.matches(':popover-open')) {
+                    toast.showPopover();
+                }
+            } catch (_) {}
+        }
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
         if (this.toastTimeout) clearTimeout(this.toastTimeout);
+        if (this.toastHidePopoverTimeout) clearTimeout(this.toastHidePopoverTimeout);
         if (duration > 0) {
-            this.toastTimeout = setTimeout(() => toast.classList.remove('show'), duration);
+            this.toastTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+                if (typeof toast.hidePopover === 'function') {
+                    this.toastHidePopoverTimeout = setTimeout(() => {
+                        try {
+                            if (toast.matches(':popover-open')) {
+                                toast.hidePopover();
+                            }
+                        } catch (_) {}
+                    }, 350);
+                }
+            }, duration);
         }
     }
 
     hideToast() {
         const toast = document.getElementById('toast');
-        if (toast) toast.classList.remove('show');
+        if (!toast) return;
+        if (this.toastTimeout) clearTimeout(this.toastTimeout);
+        if (this.toastHidePopoverTimeout) clearTimeout(this.toastHidePopoverTimeout);
+        toast.classList.remove('show');
+        if (typeof toast.hidePopover === 'function') {
+            this.toastHidePopoverTimeout = setTimeout(() => {
+                try {
+                    if (toast.matches(':popover-open')) {
+                        toast.hidePopover();
+                    }
+                } catch (_) {}
+            }, 350);
+        }
     }
 
     // Cloud Sync

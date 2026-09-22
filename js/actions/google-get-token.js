@@ -10,6 +10,7 @@ import {
 export class ActionGoogleGetToken extends Action {
     constructor() {
         super();
+        this._fetchingPromise = null;
     }
 
     async onActionPerformed(e) {
@@ -26,14 +27,27 @@ export class ActionGoogleGetToken extends Action {
      * @returns {Promise<string|null>}
      */
     async getToken() {
+        if (this._fetchingPromise) {
+            return this._fetchingPromise;
+        }
+
+        this._fetchingPromise = this._fetchToken();
+        try {
+            return await this._fetchingPromise;
+        } finally {
+            this._fetchingPromise = null;
+        }
+    }
+
+    async _fetchToken() {
         // 1. 檢查現有 token
         const currentToken = getStoredGoogleToken();
         if (currentToken) {
-            const isValid = await validateGoogleToken(currentToken);
-            if (isValid) {
-                console.log('[GoogleGetToken] 現有 token 驗證有效');
-                saveGoogleToken(currentToken);
-                dispatchGoogleApiReady(currentToken);
+            const tokenInfo = await validateGoogleToken(currentToken);
+            if (tokenInfo && tokenInfo.valid) {
+                console.log(`[GoogleGetToken] 現有 token 驗證有效 (剩餘: ${tokenInfo.expiresIn} 秒)`);
+                const authObj = saveGoogleToken(currentToken, tokenInfo.expiresIn);
+                dispatchGoogleApiReady(currentToken, authObj);
                 return currentToken;
             }
             console.log('[GoogleGetToken] 現有 token 已過期或無效，嘗試背景取得新 token...');
@@ -51,8 +65,8 @@ export class ActionGoogleGetToken extends Action {
             if (token) {
                 console.log('[GoogleGetToken] 成功透過背景 iframe 取得新 token');
                 // 3. 更新 _app 並發布事件
-                saveGoogleToken(data);
-                dispatchGoogleApiReady(token, data);
+                const authObj = saveGoogleToken(data);
+                dispatchGoogleApiReady(token, authObj);
                 return token;
             }
         } catch (err) {

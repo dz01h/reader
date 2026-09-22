@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-reader-v37';
+const CACHE_NAME = 'zen-reader-v43';
 const urlsToCache = [
   './',
   './index.html',
@@ -12,6 +12,11 @@ const urlsToCache = [
   './js/utils/i18n.js',
   './js/utils/zip-handler.js',
   './js/utils/google-auth-helper.js',
+  './js/components/explorer/file-source.js',
+  './js/components/explorer/opfs-file-source.js',
+  './js/components/explorer/gdrive-file-source.js',
+  './js/components/explorer/file-panel.js',
+  './js/components/explorer/explorer-panel.js',
   './js/book.js',
   './js/engine.js',
   './js/settings.js',

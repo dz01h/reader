@@ -184,30 +184,39 @@ class ExplorerPanel extends Component {
             throw new Error(`無法從來源載入檔案內容: ${filename}`);
         }
 
-        // 2. Handle ZIP archive unpacking
-        if (filename.toLowerCase().endsWith('.zip')) {
-            return await this.handleZipFile(rawData, filename, target, source);
-        }
-
-        // 3. Resolve binary data / stream to text
-        const text = await this.resolveToText(rawData);
-        if (typeof text !== 'string') {
-            throw new Error(`無法將檔案轉換為文字內容: ${filename}`);
-        }
-
-        // 4. Determine origin source tag
-        const isFileObject = (typeof Blob !== 'undefined' && target instanceof Blob) || 
-                             (typeof File !== 'undefined' && target instanceof File);
+        let text = '';
         let sourceTag = source?.id || '';
-        if (isFileObject) {
-            sourceTag = 'local';
+
+        // 2. Handle ZIP archive unpacking
+        if (filename.toLowerCase().endsWith('.zip') || (typeof target === 'object' && target?.mimeType === 'application/zip')) {
+            const zipResult = await this.handleZipFile(rawData, filename, target, source);
+            if (!zipResult) {
+                // Multiple files inside zip displayed in panel, waiting for user selection
+                return null;
+            }
+            text = zipResult.text;
+            filename = zipResult.filename;
+            fileId = zipResult.filename;
+            sourceTag = 'zip';
+        } else {
+            // 3. Resolve binary data / stream to text
+            text = await this.resolveToText(rawData);
+            if (typeof text !== 'string') {
+                throw new Error(`無法將檔案轉換為文字內容: ${filename}`);
+            }
+
+            const isFileObject = (typeof Blob !== 'undefined' && target instanceof Blob) || 
+                                 (typeof File !== 'undefined' && target instanceof File);
+            if (isFileObject) {
+                sourceTag = 'local';
+            }
         }
 
-        // 5. Create ReadingDocument and restore reading progress
+        // 4. Create ReadingDocument and restore reading progress
         const doc = new window.ReadingDocument(text, filename, sourceTag);
 
         let progress = 0;
-        if (typeof target.progress === 'number') {
+        if (typeof target?.progress === 'number') {
             progress = target.progress;
         } else if (window._app && window._app.positions && window._app.positions[fileId]) {
             progress = window._app.positions[fileId].progress || 0;
@@ -224,7 +233,7 @@ class ExplorerPanel extends Component {
             }
         }
 
-        // 6. Notify ReadingPanel (and OPFSFileSource) via ReadingOperation event
+        // 5. Notify ReadingPanel (and OPFSFileSource) via ReadingOperation event
         this.fireEvent('ReadingOperation', {
             action: 'read',
             params: [doc]
@@ -238,8 +247,8 @@ class ExplorerPanel extends Component {
             filename: filename
         }, true);
 
-        // 7. Close parent dialog
-        const dialog = this.parentElement || this.closest?.('dialog');
+        // 6. Close parent dialog
+        const dialog = this.parentElement || this.closest?.('dialog') || (typeof document !== 'undefined' && document.getElementById?.('file-explorer-dialog'));
         if (dialog && typeof dialog.close === 'function') {
             dialog.close();
         }
@@ -255,12 +264,7 @@ class ExplorerPanel extends Component {
 
         if (window.ZenZipHandler && window._app) {
             const zipHandler = new window.ZenZipHandler(window._app);
-            await zipHandler.processZip(blobOrBuffer, zipName);
-            const dialog = this.parentElement || this.closest?.('dialog');
-            if (dialog && typeof dialog.close === 'function') {
-                dialog.close();
-            }
-            return null;
+            return await zipHandler.processZip(blobOrBuffer, zipName);
         }
 
         if (!window.JSZip) {
@@ -289,31 +293,41 @@ class ExplorerPanel extends Component {
         if (txtFiles.length === 1) {
             const uint8array = await txtFiles[0].zipEntry.async('uint8array');
             const text = this.decodeText(uint8array);
-            const bookName = `[${zipName}] ${txtFiles[0].name}`;
-
-            const doc = new window.ReadingDocument(text, bookName, 'zip');
-            if (window._app) {
-                window._app.lastBookId = bookName;
-                if (typeof window._app.saveState === 'function') {
-                    window._app.saveState();
-                }
-            }
-
-            this.fireEvent('ReadingOperation', {
-                action: 'read',
-                params: [doc]
-            }, true);
-
-            const dialog = this.parentElement || this.closest?.('dialog');
-            if (dialog && typeof dialog.close === 'function') {
-                dialog.close();
-            }
-
-            return doc;
+            return {
+                text: text,
+                filename: `[${zipName}] ${txtFiles[0].name}`,
+                isSingle: true
+            };
         } else {
-            if (window.ZenZipHandler && window._app) {
-                const zipHandler = new window.ZenZipHandler(window._app);
-                await zipHandler.processZip(blobOrBuffer, zipName);
+            const filePanel = this.filePanel || document.querySelector('file-panel');
+            if (filePanel) {
+                const self = this;
+                const zipSource = {
+                    id: 'zip',
+                    name: `📦 ${zipName}`,
+                    path: [{ id: 'zip_root', name: zipName }],
+                    canDelete: false,
+                    async listFiles() {
+                        return txtFiles.map(f => ({
+                            id: f.id,
+                            name: f.name,
+                            type: 'file',
+                            zipEntry: f.zipEntry
+                        }));
+                    },
+                    async loadFile(item) {
+                        const entry = item.zipEntry || txtFiles.find(f => f.id === item.id)?.zipEntry;
+                        if (!entry) throw new Error('ZIP 項目未找到');
+                        const uint8array = await entry.async('uint8array');
+                        return self.decodeText(uint8array);
+                    },
+                    async navigate(targetId) {
+                        if (targetId === 'root') {
+                            filePanel.setSource(FileSource.getInstance() || (window.OPFSFileSource ? new window.OPFSFileSource() : null));
+                        }
+                    }
+                };
+                filePanel.setSource(zipSource);
             }
             return null;
         }

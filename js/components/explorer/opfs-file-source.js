@@ -5,6 +5,7 @@
 class OPFSFileSource extends (window.FileSource || class {}) {
     constructor() {
         super('opfs', '已存書籍');
+        this.canDelete = true;
         OPFSFileSource.bindGlobalEvents();
     }
 
@@ -46,9 +47,9 @@ class OPFSFileSource extends (window.FileSource || class {}) {
             // Notify file panels to refresh if they are currently displaying OPFS
             if (typeof document !== 'undefined' && document.body) {
                 const event = typeof CustomEvent !== 'undefined' 
-                    ? new CustomEvent('fileSourceChanged', { detail: { source: 'opfs', filename: filename } })
+                    ? new CustomEvent('fileSourceChanged', { detail: { source: 'opfs', filename: filename }, bubbles: true })
                     : { type: 'fileSourceChanged', detail: { source: 'opfs', filename: filename } };
-                document.body.dispatchEvent(event.type || 'fileSourceChanged', event);
+                document.body.dispatchEvent(event);
             }
         } catch (err) {
             console.warn('[OPFSFileSource] 自動存入 OPFS 失敗:', err);

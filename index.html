@@ -73,7 +73,7 @@
             </div>
         </footer>
 
-        <div id="toast" class="toast" data-i18n="toastReady">語音模組已就緒</div>
+        <div id="toast" class="toast" popover="manual" data-i18n="toastReady">語音模組已就緒</div>
 
         <!-- TOC Dialog -->
         <div id="toc-dialog" class="toc-dialog hidden">
@@ -162,9 +162,9 @@
                     <action-button class="icon-btn" id="btn-upload" data-i18n="title:btnSelectLocal" action="load-local-files">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                     </action-button>
-                    <action-button class="icon-btn" id="btn-gdrive" data-i18n="title:btnGDrive" title="由 Google Drive 載入"  action="load-gdrive-files">
+                    <gdrive-file-source class="icon-btn" id="btn-gdrive" data-i18n="title:btnGDrive" title="由 Google Drive 載入">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22.06 15.81l-3.26-5.63A2 2 0 0 0 17.06 9H6.94a2 2 0 0 0-1.74 1.18L1.94 15.81A2 2 0 0 0 3.67 19h16.66a2 2 0 0 0 1.73-3.19z"></path><path d="M12 3L1.94 15.81"></path><path d="M6.94 9h15.12"></path></svg>
-                    </action-button>
+                    </gdrive-file-source>
                 </div>
                 <span class="source-divider"></span>
                 <div class="file-source-sort">
@@ -190,6 +190,7 @@
     <script src="js/services/db.js"></script>
     <script src="js/book.js"></script>
     <script src="js/utils/i18n.js"></script>
+    <script type="module" src="js/utils/google-auth-helper.js"></script>
     <script src="js/components/reader/reading-document.js"></script>
     <script src="js/components/reader/text-render-engine.js"></script>
     <script src="js/tts/chunks.js"></script>
@@ -212,6 +213,7 @@
     <script src="js/components/settings/setting-panel.js"></script>
     <script src="js/components/explorer/file-source.js"></script>
     <script src="js/components/explorer/opfs-file-source.js"></script>
+    <script src="js/components/explorer/gdrive-file-source.js"></script>
     <script src="js/components/explorer/file-panel.js"></script>
     <script src="js/components/explorer/explorer-panel.js"></script>
     <script src="js/file-explorer.js"></script>

@@ -8,6 +8,7 @@ class FileSource extends ToggleButton {
         this.id = id;
         this.name = name;
         this.path = []; // Breadcrumb path: [{ id: string, name: string }]
+        this.canDelete = false;
     }
 
     initComponent() {

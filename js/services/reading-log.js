@@ -1,6 +1,7 @@
 class ZenReadingLog {
     constructor(gdrive) {
         this.gdrive = gdrive;
+        this.accessToken = null;
         this.sheetId = localStorage.getItem('zen_reader_sheet_id') || null;
         this.lastSyncTime = 0;
         this.currentBookName = '';
@@ -9,9 +10,38 @@ class ZenReadingLog {
         this.syncing = false;
         this.lastCloudTime = 0;
 
+        document.body.addEventListener('GoogleApiReady', (e) => {
+            this.accessToken = e.detail?.accessToken || e.detail?.token || null;
+        });
+
         document.body.addEventListener('ReadingOver', (e) => {
             this.handleReadingOver(e.detail.prog);
         });
+    }
+
+    /**
+     * Retrieve access token via GoogleAuthHelper and google-get-token action
+     * @returns {Promise<string|null>}
+     */
+    async getAccessToken() {
+        if (window.GoogleAuthHelper && typeof window.GoogleAuthHelper.getStoredGoogleToken === 'function') {
+            const token = window.GoogleAuthHelper.getStoredGoogleToken();
+            if (token) {
+                this.accessToken = token;
+                return token;
+            }
+        }
+        if (window.GoogleAuthHelper && typeof window.GoogleAuthHelper.requestGoogleToken === 'function') {
+            const token = await window.GoogleAuthHelper.requestGoogleToken();
+            if (token) {
+                this.accessToken = token;
+                return token;
+            }
+        }
+        if (this.gdrive && typeof this.gdrive.getAccessToken === 'function') {
+            return await this.gdrive.getAccessToken();
+        }
+        return this.accessToken || null;
     }
 
     setReadingBook(filename) {
@@ -143,7 +173,7 @@ class ZenReadingLog {
     }
 
     async getSheetId() {
-        const token = await this.gdrive.getAccessToken();
+        const token = await this.getAccessToken();
         if (!token) return null;
 
         if(this.sheetId) return this.sheetId;
@@ -272,7 +302,7 @@ class ZenReadingLog {
         this.updateSyncStatus('syncing');
         
         try {
-            const token = await this.gdrive.getAccessToken();
+            const token = await this.getAccessToken();
             if (!token) {
                 this.updateSyncStatus('error', 'Auth failed');
                 return null;
@@ -474,7 +504,7 @@ class ZenReadingLog {
         this.syncing = true;
         this.updateSyncStatus('syncing');
 
-        const token = await this.gdrive.getAccessToken();
+        const token = await this.getAccessToken();
         if (!token) {
             this.updateSyncStatus('error', 'Auth failed');
             return;
@@ -585,7 +615,7 @@ class ZenReadingLog {
         const sheetId = await this.getSheetId();
         if (!sheetId) return {};
 
-        const token = await this.gdrive.getAccessToken();
+        const token = await this.getAccessToken();
         if (!token) return {};
 
         try {
@@ -629,7 +659,7 @@ class ZenReadingLog {
         const sheetId = await this.getSheetId();
         if (!sheetId) return [];
 
-        const token = await this.gdrive.getAccessToken();
+        const token = await this.getAccessToken();
         if (!token) return [];
 
         let shouldFetch = true;
