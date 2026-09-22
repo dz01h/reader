@@ -3,20 +3,40 @@ class OPFSModule {
         this.dirName = 'reader';
     }
 
+    isSupported() {
+        return typeof navigator !== 'undefined' && 
+               typeof navigator.storage !== 'undefined' && 
+               typeof navigator.storage.getDirectory === 'function';
+    }
+
     async getDir() {
-        const root = await navigator.storage.getDirectory();
-        return await root.getDirectoryHandle(this.dirName, { create: true });
+        if (!this.isSupported()) return null;
+        try {
+            const root = await navigator.storage.getDirectory();
+            return await root.getDirectoryHandle(this.dirName, { create: true });
+        } catch (e) {
+            console.warn('[OPFS] getDir error:', e);
+            return null;
+        }
     }
 
     async getCacheDir() {
-        const root = await navigator.storage.getDirectory();
-        const readerDir = await root.getDirectoryHandle(this.dirName, { create: true });
-        return await readerDir.getDirectoryHandle('.cache', { create: true });
+        if (!this.isSupported()) return null;
+        try {
+            const root = await navigator.storage.getDirectory();
+            const readerDir = await root.getDirectoryHandle(this.dirName, { create: true });
+            return await readerDir.getDirectoryHandle('.cache', { create: true });
+        } catch (e) {
+            console.warn('[OPFS] getCacheDir error:', e);
+            return null;
+        }
     }
 
     async saveCacheFile(filename, content) {
+        if (!this.isSupported()) return false;
         try {
             const dir = await this.getCacheDir();
+            if (!dir) return false;
             const fileHandle = await dir.getFileHandle(filename, { create: true });
             const writable = await fileHandle.createWritable();
             await writable.write(content);
@@ -29,8 +49,10 @@ class OPFSModule {
     }
 
     async loadCacheFile(filename) {
+        if (!this.isSupported()) return null;
         try {
             const dir = await this.getCacheDir();
+            if (!dir) return null;
             const fileHandle = await dir.getFileHandle(filename);
             const file = await fileHandle.getFile();
             return await file.text();
@@ -41,8 +63,10 @@ class OPFSModule {
     }
 
     async saveFile(filename, content) {
+        if (!this.isSupported()) return false;
         try {
             const dir = await this.getDir();
+            if (!dir) return false;
             const fileHandle = await dir.getFileHandle(filename, { create: true });
             const writable = await fileHandle.createWritable();
             await writable.write(content);
@@ -55,8 +79,10 @@ class OPFSModule {
     }
 
     async loadFile(filename) {
+        if (!this.isSupported()) return null;
         try {
             const dir = await this.getDir();
+            if (!dir) return null;
             const fileHandle = await dir.getFileHandle(filename);
             const file = await fileHandle.getFile();
             return await file.text();
@@ -67,8 +93,10 @@ class OPFSModule {
     }
 
     async deleteFile(filename) {
+        if (!this.isSupported()) return false;
         try {
             const dir = await this.getDir();
+            if (!dir) return false;
             await dir.removeEntry(filename);
             return true;
         } catch (e) {
@@ -78,8 +106,10 @@ class OPFSModule {
     }
 
     async listFiles() {
+        if (!this.isSupported()) return [];
         try {
             const dir = await this.getDir();
+            if (!dir) return [];
             const files = [];
             for await (const entry of dir.values()) {
                 if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.txt')) {
@@ -102,8 +132,10 @@ class OPFSModule {
     }
 
     async downloadFile(filename) {
+        if (!this.isSupported()) return false;
         try {
             const dir = await this.getDir();
+            if (!dir) return false;
             const fileHandle = await dir.getFileHandle(filename);
             const file = await fileHandle.getFile();
             
@@ -124,4 +156,9 @@ class OPFSModule {
     }
 }
 
-window.ZenOPFS = new OPFSModule();
+if (typeof window !== 'undefined') {
+    window.ZenOPFS = new OPFSModule();
+}
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { OPFSModule };
+}

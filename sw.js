@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-reader-v60';
+const CACHE_NAME = 'zen-reader-v64';
 const urlsToCache = [
   './',
   './index.html',
@@ -23,6 +23,8 @@ const urlsToCache = [
   './js/actions/toggle-chapter-selector.js',
   './js/actions/open-explorer-dialog.js',
   './js/actions/local-reading-progress.js',
+  './js/actions/open-reading-log.js',
+  './js/actions/clear-cache.js',
   './js/components/component.js',
   './js/components/action-button.js',
   './js/components/toggle-button.js',

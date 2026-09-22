@@ -71,22 +71,50 @@ export function getStoredGoogleAuth() {
 
 /**
  * Retrieve cached token string if valid / not expired
- * @param {number} [bufferMs=180000] Buffer in milliseconds (default 3 mins) to treat as expired early
+ * @param {number} [bufferMs=0] Buffer in milliseconds to treat as expired early (default 0)
  * @returns {string|null}
  */
-export function getStoredGoogleToken(bufferMs = 180000) {
+export function getStoredGoogleToken(bufferMs = 0) {
     const auth = getStoredGoogleAuth();
     if (!auth || !auth.accessToken) return null;
 
     // Check if expiresAt exists and is expired or close to expiry (within bufferMs)
     if (auth.expiresAt && typeof auth.expiresAt === 'number' && auth.expiresAt > 0) {
         if (Date.now() + bufferMs >= auth.expiresAt) {
-            console.log('[GoogleAuth] Stored token has expired or is expiring soon (within buffer)');
             return null;
         }
     }
 
     return auth.accessToken;
+}
+
+/**
+ * Check if the stored token is expiring soon (within bufferMs, default 5 minutes)
+ * @param {number} [bufferMs=300000] 5 minutes default
+ * @returns {boolean}
+ */
+export function isTokenExpiringSoon(bufferMs = 300000) {
+    const auth = getStoredGoogleAuth();
+    if (!auth || !auth.accessToken) return true;
+    if (!auth.expiresAt || typeof auth.expiresAt !== 'number') return false;
+    return Date.now() + bufferMs >= auth.expiresAt;
+}
+
+/**
+ * Notify that the Google Token has expired or is invalid (e.g. on 401/403 HTTP response)
+ * Dispatches GoogleTokenRefreshRequired and ActionPerformed google-get-token
+ */
+export function notifyTokenExpired(reason = 'api_401') {
+    if (typeof document !== 'undefined' && document.body) {
+        document.body.dispatchEvent(new CustomEvent('GoogleTokenRefreshRequired', {
+            detail: { reason },
+            bubbles: true
+        }));
+        document.body.dispatchEvent(new CustomEvent('ActionPerformed', {
+            detail: { action: 'google-get-token', forceRefresh: true, reason },
+            bubbles: true
+        }));
+    }
 }
 
 /**
@@ -164,10 +192,23 @@ export function dispatchGoogleApiReady(accessToken, extraData = {}) {
 /**
  * Request Google token by dispatching the 'google-get-token' action
  * and waiting for the GoogleApiReady broadcast event.
- * @param {number} [timeoutMs=15000]
+ * @param {number|Object} [options=15000] Timeout in ms or options object
  * @returns {Promise<string|null>}
  */
-export function requestGoogleToken(timeoutMs = 15000) {
+export function requestGoogleToken(options = 15000) {
+    const opts = typeof options === 'number' ? { timeoutMs: options } : (options || {});
+    const timeoutMs = opts.timeoutMs ?? 15000;
+    const forceRefresh = !!opts.forceRefresh;
+    const checkLocalFirst = opts.checkLocalFirst !== false;
+
+    // Fast path: if unexpired token exists locally and not forcing refresh
+    if (!forceRefresh && checkLocalFirst) {
+        const cachedToken = getStoredGoogleToken();
+        if (cachedToken) {
+            return Promise.resolve(cachedToken);
+        }
+    }
+
     return new Promise((resolve) => {
         let timer = null;
         const onReady = (e) => {
@@ -182,7 +223,7 @@ export function requestGoogleToken(timeoutMs = 15000) {
         if (typeof document !== 'undefined' && document.body) {
             document.body.addEventListener('GoogleApiReady', onReady);
             document.body.dispatchEvent(new CustomEvent('ActionPerformed', {
-                detail: { action: 'google-get-token' },
+                detail: { action: 'google-get-token', forceRefresh },
                 bubbles: true
             }));
         } else {
@@ -302,6 +343,8 @@ if (typeof window !== 'undefined') {
         validateGoogleToken,
         getStoredGoogleAuth,
         getStoredGoogleToken,
+        isTokenExpiringSoon,
+        notifyTokenExpired,
         requestGoogleToken,
         saveGoogleToken,
         dispatchGoogleApiReady,
@@ -316,6 +359,8 @@ if (typeof module !== 'undefined' && module.exports) {
         validateGoogleToken,
         getStoredGoogleAuth,
         getStoredGoogleToken,
+        isTokenExpiringSoon,
+        notifyTokenExpired,
         requestGoogleToken,
         saveGoogleToken,
         dispatchGoogleApiReady,

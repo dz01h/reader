@@ -8,6 +8,8 @@ import { ActionCloseReadingFile } from './actions/close-reading-file.js';
 import { ActionToggleChapterSelector } from './actions/toggle-chapter-selector.js';
 import { ActionOpenExplorerDialog } from './actions/open-explorer-dialog.js';
 import { ActionLocalReadingProgress } from './actions/local-reading-progress.js';
+import { ActionOpenReadingLog } from './actions/open-reading-log.js';
+import { ActionClearCache } from './actions/clear-cache.js';
 
 // 註冊 actions 資料夾中的模組清單
 const actionModules = [
@@ -19,7 +21,9 @@ const actionModules = [
     { name: 'close-reading-file', module: { ActionCloseReadingFile } },
     { name: 'toggle-chapter-selector', module: { ActionToggleChapterSelector } },
     { name: 'open-explorer-dialog', module: { ActionOpenExplorerDialog } },
-    { name: 'local-reading-progress', module: { ActionLocalReadingProgress } }
+    { name: 'local-reading-progress', module: { ActionLocalReadingProgress } },
+    { name: 'open-reading-log', module: { ActionOpenReadingLog } },
+    { name: 'clear-cache', module: { ActionClearCache } }
 ];
 
 export class ActionLoader {

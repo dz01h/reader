@@ -63,6 +63,24 @@ class GDriveModule {
         return null;
     }
 
+    async fetchWithAuth(url, options = {}) {
+        const token = await this.getAccessToken();
+        if (!token) return null;
+
+        const headers = Object.assign({}, options.headers || {}, {
+            'Authorization': `Bearer ${token}`
+        });
+
+        const response = await fetch(url, Object.assign({}, options, { headers }));
+        if (response.status === 401 || response.status === 403) {
+            console.warn(`[ZenGDrive] Google Drive API authentication error (${response.status}), notifying token expired...`);
+            if (window.GoogleAuthHelper && typeof window.GoogleAuthHelper.notifyTokenExpired === 'function') {
+                window.GoogleAuthHelper.notifyTokenExpired(`gdrive_api_${response.status}`);
+            }
+        }
+        return response;
+    }
+
     handlePopState(event) {
         if (this.app.explorer) {
             this.app.explorer.saveScrollState();
@@ -207,11 +225,10 @@ class GDriveModule {
                 query = encodeURIComponent(`trashed = false and '${folderId}' in parents and ${mimeFilter}`);
             }
 
-            const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType)&pageSize=1000&includeItemsFromAllDrives=true&supportsAllDrives=true`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
+            const response = await this.fetchWithAuth(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,mimeType)&pageSize=1000&includeItemsFromAllDrives=true&supportsAllDrives=true`);
+            if (!response || !response.ok) {
+                throw new Error(`GDrive fetchFolder failed: ${response?.status}`);
+            }
             const data = await response.json();
             
             let items = (data.files || []).map(f => ({
@@ -263,17 +280,10 @@ class GDriveModule {
 
     async downloadFile(fileId, fileName, mimeType) {
         this.app.showToast(this.app.i18n ? this.app.i18n.t('gdriveDownloading', fileName) : `Downloading ${fileName}...`);
-        const token = await this.getAccessToken();
-        if (!token) return;
 
         try {
-            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
-            });
-
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const response = await this.fetchWithAuth(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+            if (!response || !response.ok) throw new Error(`HTTP error! status: ${response?.status}`);
 
             const contentLength = response.headers.get('content-length');
             const total = contentLength ? parseInt(contentLength, 10) : 0;

@@ -1031,6 +1031,11 @@ nav-sync-status {
     box-shadow: 0 0 4px #48bb78;
 }
 
+.lamp-sync[data-status="throttled"] {
+    background-color: #4299e1; /* 🔵 Blue: 進度變動但冷卻中 */
+    box-shadow: 0 0 4px #4299e1;
+}
+
 .lamp-sync[data-status="error"] {
     background-color: #f56565; /* 🔴 Red: 同步失敗 */
 }

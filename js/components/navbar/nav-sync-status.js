@@ -70,9 +70,9 @@ class NavSyncStatus extends Component {
         });
 
         // Listen for GoogleApiReady
-        document.body.addEventListener('GoogleApiReady', () => {
+        document.body.addEventListener('GoogleApiReady', (e) => {
             this.setTokenStatus('valid', 'Token 驗證有效');
-            if (document.body.classList.contains('reading-mode')) {
+            if (this.currentBook && document.body.classList.contains('reading-mode')) {
                 this.checkAndSyncCloudProgress();
             }
         });
@@ -88,7 +88,13 @@ class NavSyncStatus extends Component {
                     timestamp: doc.timestamp || Date.now()
                 };
                 this.lastSyncTimestamp = 0; // reset cooldown on new book
-                this.checkAndSyncCloudProgress();
+                
+                // Only trigger sync if token is already valid; otherwise wait for GoogleApiReady
+                if (this.tokenStatus === 'valid') {
+                    this.checkAndSyncCloudProgress();
+                } else if (this.tokenStatus === 'none' || this.tokenStatus === 'testing') {
+                    this.setSyncStatus('none', '等待 Token 驗證');
+                }
             } else if (action === 'reset') {
                 this.currentBook = null;
                 this.setSyncStatus('none', '未在閱讀中');
@@ -105,20 +111,20 @@ class NavSyncStatus extends Component {
 
         // Window Lifecycle events
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && document.body.classList.contains('reading-mode')) {
+            if (document.visibilityState === 'visible' && this.currentBook && document.body.classList.contains('reading-mode')) {
                 this.checkAndSyncCloudProgress();
             }
         });
 
         window.addEventListener('focus', () => {
-            if (document.body.classList.contains('reading-mode')) {
+            if (this.currentBook && document.body.classList.contains('reading-mode')) {
                 this.checkAndSyncCloudProgress();
             }
         });
 
         window.addEventListener('online', () => {
             this.checkInitialState();
-            if (document.body.classList.contains('reading-mode')) {
+            if (this.currentBook && document.body.classList.contains('reading-mode')) {
                 this.checkAndSyncCloudProgress();
             }
         });
@@ -136,10 +142,19 @@ class NavSyncStatus extends Component {
             return;
         }
 
+        const helper = window.GoogleAuthHelper;
+        const storedToken = helper ? helper.getStoredGoogleToken(0) : null;
+        if (storedToken) {
+            this.setTokenStatus('valid', '已載入本機有效 Token');
+            this.setSyncStatus('none', '未同步');
+            return;
+        }
+
         const hasAuth = !!localStorage.getItem('gdrive_auth');
         if (hasAuth) {
             this.setTokenStatus('testing', '正在驗證 Google 授權...');
-            // Trigger ActionGoogleGetToken to validate
+            this.setSyncStatus('none', '等待 Token 驗證');
+            // Trigger ActionGoogleGetToken
             document.body.dispatchEvent(new CustomEvent('ActionPerformed', {
                 detail: { action: 'google-get-token' },
                 bubbles: true
@@ -163,9 +178,7 @@ class NavSyncStatus extends Component {
         }
 
         if (status === 'none' || status === 'offline') {
-            if (this.syncStatus === 'syncing') {
-                this.setSyncStatus('none', status === 'offline' ? '已離線' : '未授權');
-            }
+            this.setSyncStatus('none', status === 'offline' ? '已離線' : '未授權');
         }
     }
 
@@ -190,7 +203,7 @@ class NavSyncStatus extends Component {
         }
     }
 
-    handleClick() {
+    async handleClick() {
         if (!navigator.onLine) {
             document.body.dispatchEvent(new CustomEvent('showInToast', {
                 detail: { message: '目前為離線狀態，無法同步', duration: 2500 },
@@ -207,7 +220,7 @@ class NavSyncStatus extends Component {
             }));
         } else {
             // Trigger manual cloud sync immediately
-            this.checkAndSyncCloudProgress(true);
+            await this.checkAndSyncCloudProgress(true);
         }
     }
 
@@ -220,15 +233,35 @@ class NavSyncStatus extends Component {
         if (now - this.lastSyncTimestamp > cooldown) {
             this.lastSyncTimestamp = now;
             await this.performRemoteSync(this.currentBook.filename, progress);
+        } else {
+            // Reading progress changed, but throttled by cooldown
+            const remainingMins = Math.max(1, Math.ceil((cooldown - (now - this.lastSyncTimestamp)) / 60000));
+            this.setSyncStatus('throttled', `進度已變更 (冷卻中，約 ${remainingMins} 分鐘後同步)`);
         }
     }
 
     async checkAndSyncCloudProgress(force = false) {
         if (!navigator.onLine) {
             this.setTokenStatus('offline', '目前為離線狀態');
+            this.setSyncStatus('none', '已離線');
             return;
         }
         if (!this.currentBook) return;
+
+        // Ensure token is valid before starting sync
+        if (this.tokenStatus !== 'valid') {
+            const helper = window.GoogleAuthHelper;
+            if (helper && typeof helper.requestGoogleToken === 'function') {
+                const token = await helper.requestGoogleToken({ timeoutMs: 8000 });
+                if (!token) {
+                    this.setSyncStatus('none', 'Token 不可用');
+                    return;
+                }
+            } else {
+                this.setSyncStatus('none', '等待 Token 驗證');
+                return;
+            }
+        }
 
         const app = window._app;
         const readingLog = app?.readingLog;

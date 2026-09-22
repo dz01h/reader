@@ -105,10 +105,11 @@ class GDriveFileSource extends (window.FileSource || class {}) {
             });
 
             if (!res.ok) {
-                if (res.status === 401) {
-                    console.warn('[GDriveFileSource] Token expired (401), attempting background refresh...');
-                    localStorage.removeItem('gdrive_auth');
-                    if (window._app) window._app.gdriveToken = null;
+                if (res.status === 401 || res.status === 403) {
+                    console.warn(`[GDriveFileSource] Token authentication error (${res.status}), notifying token expired...`);
+                    if (helper && typeof helper.notifyTokenExpired === 'function') {
+                        helper.notifyTokenExpired(`gdrive_filesource_${res.status}`);
+                    }
                     const newToken = await this.getAccessToken();
                     if (newToken) {
                         return this.listFiles();
@@ -198,6 +199,12 @@ class GDriveFileSource extends (window.FileSource || class {}) {
         });
 
         if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+                const helper = this.getAuthHelper();
+                if (helper && typeof helper.notifyTokenExpired === 'function') {
+                    helper.notifyTokenExpired(`gdrive_filesource_download_${response.status}`);
+                }
+            }
             throw new Error(`Google Drive 下載失敗: HTTP ${response.status}`);
         }
 

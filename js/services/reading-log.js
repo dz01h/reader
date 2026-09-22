@@ -44,6 +44,39 @@ class ZenReadingLog {
         return this.accessToken || null;
     }
 
+    /**
+     * Check API response for authentication errors (401/403) and trigger reactive token refresh
+     * @param {Response} res 
+     * @returns {Response}
+     */
+    checkAuthResponse(res) {
+        if (res && (res.status === 401 || res.status === 403)) {
+            console.warn(`[ZenReadingLog] Google API authentication error (${res.status}), notifying token expired...`);
+            if (window.GoogleAuthHelper && typeof window.GoogleAuthHelper.notifyTokenExpired === 'function') {
+                window.GoogleAuthHelper.notifyTokenExpired(`sheets_api_${res.status}`);
+            }
+        }
+        return res;
+    }
+
+    /**
+     * Authenticated fetch helper that injects Authorization header and checks for 401/403
+     * @param {string} url 
+     * @param {Object} [options] 
+     * @returns {Promise<Response|null>}
+     */
+    async fetchWithAuth(url, options = {}) {
+        const token = await this.getAccessToken();
+        if (!token) return null;
+
+        const headers = Object.assign({}, options.headers || {}, {
+            'Authorization': `Bearer ${token}`
+        });
+
+        const res = await fetch(url, Object.assign({}, options, { headers }));
+        return this.checkAuthResponse(res);
+    }
+
     setReadingBook(filename) {
         this.currentBookName = filename;
         this.resetInit();
@@ -153,16 +186,15 @@ class ZenReadingLog {
             }
 
             if (requests.length > 0) {
-                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+                const res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ requests })
                 });
-                if (!res.ok) {
-                    console.error("Batch update failed:", await res.text());
+                if (!res || !res.ok) {
+                    console.error("Batch update failed:", res ? await res.text() : 'No response');
                 } else {
                     console.log("Upgraded existing Reading Log sheet schema.");
                 }
@@ -181,10 +213,8 @@ class ZenReadingLog {
         this.sheetId = localStorage.getItem('zen_reader_sheet_id');
         if (this.sheetId) {
            try {
-                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}?fields=spreadsheetId`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
+                const res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${this.sheetId}?fields=spreadsheetId`);
+                if (res && res.ok) {
                     await this.upgradeSheetSchema(token, this.sheetId);
                     return this.sheetId;
                 }
@@ -197,10 +227,8 @@ class ZenReadingLog {
             try {
                 // Search for existing Reading Log spreadsheet in the user's Drive
                 const q = encodeURIComponent("name = 'Reading Log' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false");
-                const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (searchRes.ok) {
+                const searchRes = await this.fetchWithAuth(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+                if (searchRes && searchRes.ok) {
                     const searchData = await searchRes.json();
                     if (searchData.files && searchData.files.length > 0) {
                         this.sheetId = searchData.files[0].id;
@@ -215,10 +243,9 @@ class ZenReadingLog {
             }
 
             try {
-                const res = await fetch('https://sheets.googleapis.com/v4/spreadsheets', {
+                const res = await this.fetchWithAuth('https://sheets.googleapis.com/v4/spreadsheets', {
                     method: 'POST',
                     headers: { 
-                        'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
@@ -316,9 +343,8 @@ class ZenReadingLog {
 
         let actualSheetId = 0;
         try {
-            const infoRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.sheetId`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const infoRes = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets.properties.sheetId`);
+            if (!infoRes) return null;
             if (infoRes.status === 404) {
                 this.sheetId = null;
                 localStorage.removeItem('zen_reader_sheet_id');
@@ -335,16 +361,14 @@ class ZenReadingLog {
 
         let values = [];
         try {
-            let res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C1001`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            let res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C1001`);
+            if (!res) return null;
             
             if (res.status === 400) {
                 console.log("Got 400 reading progress, attempting schema upgrade...");
                 await this.upgradeSheetSchema(token, sheetId);
-                res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C1001`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C1001`);
+                if (!res) return null;
             }
             
             if (res.status === 404) {
@@ -444,14 +468,14 @@ class ZenReadingLog {
 
         if (requests.length > 0) {
             try {
-                const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+                const res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ requests })
                 });
+                if (!res) return null;
                 if (res.status === 404) {
                     this.sheetId = null;
                     localStorage.removeItem('zen_reader_sheet_id');
@@ -504,30 +528,24 @@ class ZenReadingLog {
         this.syncing = true;
         this.updateSyncStatus('syncing');
 
-        const token = await this.getAccessToken();
-        if (!token) {
-            this.updateSyncStatus('error', 'Auth failed');
-            return;
-        }
-
         const sheetId = await this.getSheetId();
         if (!sheetId) {
             this.updateSyncStatus('error', 'Sheet not found');
+            this.syncing = false;
             return;
         }
 
         try {
             // Check if this book is still at the top row (A2:C2) to compare progress
-            let checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            let checkRes = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2`);
+            if (!checkRes) return;
 
             if (checkRes.status === 400) {
                 console.log("Got 400 reading progress, attempting schema upgrade...");
+                const token = await this.getAccessToken();
                 await this.upgradeSheetSchema(token, sheetId);
-                checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                checkRes = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2`);
+                if (!checkRes) return;
             }
 
             if (checkRes.status === 404) {
@@ -567,26 +585,27 @@ class ZenReadingLog {
                 values: [[filename, progress, timestamp]]
             };
             
-            let res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2?valueInputOption=USER_ENTERED`, {
+            let res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2?valueInputOption=USER_ENTERED`, {
                 method: 'PUT',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(payload)
             });
+            if (!res) return;
             
             if (res.status === 400) {
                 console.log("Got 400 updating progress, attempting schema upgrade...");
+                const token = await this.getAccessToken();
                 await this.upgradeSheetSchema(token, sheetId);
-                res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2?valueInputOption=USER_ENTERED`, {
+                res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/progress!A2:C2?valueInputOption=USER_ENTERED`, {
                     method: 'PUT',
                     headers: {
-                        'Authorization': `Bearer ${token}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(payload)
                 });
+                if (!res) return;
             }
             
             if (res.status === 404) {
@@ -615,20 +634,16 @@ class ZenReadingLog {
         const sheetId = await this.getSheetId();
         if (!sheetId) return {};
 
-        const token = await this.getAccessToken();
-        if (!token) return {};
-
         try {
-            let res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/tts_dict!A2:C1000`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            let res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/tts_dict!A2:C1000`);
+            if (!res) return {};
             
             if (res.status === 400) {
                 console.log("Got 400 fetching tts_dict, attempting schema upgrade...");
+                const token = await this.getAccessToken();
                 await this.upgradeSheetSchema(token, sheetId);
-                res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/tts_dict!A2:C1000`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
+                res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/tts_dict!A2:C1000`);
+                if (!res) return {};
             }
             
             if (!res.ok) {
@@ -659,18 +674,13 @@ class ZenReadingLog {
         const sheetId = await this.getSheetId();
         if (!sheetId) return [];
 
-        const token = await this.getAccessToken();
-        if (!token) return [];
-
         let shouldFetch = true;
         let cachedDict = null;
 
         try {
             // Check Google Drive file modifiedTime
-            const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${sheetId}?fields=modifiedTime`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (metaRes.ok) {
+            const metaRes = await this.fetchWithAuth(`https://www.googleapis.com/drive/v3/files/${sheetId}?fields=modifiedTime`);
+            if (metaRes && metaRes.ok) {
                 const meta = await metaRes.json();
                 const remoteModifiedTime = new Date(meta.modifiedTime).getTime();
 
@@ -688,16 +698,15 @@ class ZenReadingLog {
                 
                 if (shouldFetch) {
                     // Fetch the dict
-                    let res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/用詞替換表!A2:B1000`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    let res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/用詞替換表!A2:B1000`);
+                    if (!res) return [];
                     
                     if (res.status === 400) {
                         console.log("Got 400 fetching 用詞替換表, attempting schema upgrade...");
+                        const token = await this.getAccessToken();
                         await this.upgradeSheetSchema(token, sheetId);
-                        res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/用詞替換表!A2:B1000`, {
-                            headers: { 'Authorization': `Bearer ${token}` }
-                        });
+                        res = await this.fetchWithAuth(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/用詞替換表!A2:B1000`);
+                        if (!res) return [];
                     }
                     
                     if (res.ok) {
