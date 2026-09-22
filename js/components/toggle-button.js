@@ -51,7 +51,7 @@ class ToggleButton extends ActionButton {
         if (this.hasAttribute('value')) {
             input.setAttribute('value', this.getAttribute('value'));
         }
-        this.append(input);
+        this.prepend(input);
     }
 
     triggerAction() {

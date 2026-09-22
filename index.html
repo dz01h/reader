@@ -22,17 +22,13 @@
         <!-- Header -->
         <header class="app-header">
             <div class="header-left" style="display: flex; align-items: center;">
-                <div class="logo" data-i18n="appTitle">Zen Reader</div>
-                <button id="btn-close-reader" class="btn-close-header" data-i18n="title:closeFile" title="關閉檔案">
+                <div class="logo" data-i18n="appTitle"></div>
+                <action-button id="btn-close-reader" class="btn-close-header" action="close-reading-file">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                </button>
+                </action-button>
             </div>
 
-            <div class="header-center" id="header-center">
-                <span class="document-title-header" id="document-title"></span>
-            </div>
-
-            <button onclick="document.getElementById('file-explorer-dialog').showModal();">load</button>
+            <nav-header-title id="document-title" class="header-center document-title-header" action="open-explorer-dialog"></nav-header-title>
 
             <div class="controls">
                 <action-button id="btn-open-settings" action="openSettingDialog">
@@ -52,18 +48,13 @@
                     <nav-progressbar id="progress-slider" data-i18n="title:progressTitle" title="拖動調整閱讀進度"></nav-progressbar>
                     <div class="status-bottom">
                         <div class="info-left">
-                            <button id="btn-toc-toggle" class="icon-btn" title="章節清單">
+                            <toggle-button id="btn-toc-toggle" class="icon-btn" name="toggle-chapter-selector" value="asc" action="toggle-chapter-selector" title="章節清單">
                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                            </button>
+                            </toggle-button>
+                            <nav-chapter-selector id="menu-chapter-selector"></nav-chapter-selector>
                         </div>
                         <div class="info-right">
-                            <div id="sync-status" class="sync-status hidden">
-                                <div class="sync-icon"></div>
-                                <div class="sync-tooltip">
-                                    <div id="sync-time">-</div>
-                                    <div id="sync-msg">-</div>
-                                </div>
-                            </div>
+                            <nav-sync-status id="nav-sync-status"></nav-sync-status>
                         </div>
                     </div>
                 </div>
@@ -72,14 +63,7 @@
                 </button>
             </div>
         </footer>
-
-        <div id="toast" class="toast" popover="manual" data-i18n="toastReady">語音模組已就緒</div>
-
-        <!-- TOC Dialog -->
-        <div id="toc-dialog" class="toc-dialog hidden">
-            <div class="toc-header" data-i18n="toc">目錄</div>
-            <div id="toc-list" class="toc-list"></div>
-        </div>
+        <nav-toast id="toast" class="toast" popover="manual"></nav-toast>
     </div>
 
     <dialog id="settings-dialog" class="settings-dialog">
@@ -203,6 +187,10 @@
     <script src="js/services/reading-log.js"></script>
     <script src="js/components/component.js"></script>
     <script src="js/components/navbar/nav-progressbar.js"></script>
+    <script src="js/components/navbar/nav-chapter-selector.js"></script>
+    <script src="js/components/navbar/nav-toast.js"></script>
+    <script src="js/components/navbar/nav-header-title.js"></script>
+    <script src="js/components/navbar/nav-sync-status.js"></script>
     <script src="js/components/reader/reading-panel.js"></script>
     <script src="js/components/action-button.js"></script>
     <script src="js/components/toggle-button.js"></script>

@@ -190,15 +190,22 @@ class ReadingPanel extends Component {
 
     onPointerUp(e) {
         if (!this.dragging || e.pointerId !== this.dragging.pid) return;
+        const wasDrag = this.dragging.isDrag;
         this.dragging.finish(e);
-        if(!this.dragging.isDrag) {
-            const options = {};
-            for(let k in PointerEvent.prototype) {
-                if(typeof e[k] !== 'function') {
-                    options[k] = e[k];
-                }
-            }
-            this.fireEvent(new PointerEvent('click', options));
+        if (!wasDrag) {
+            const options = {
+                clientX: e.clientX,
+                clientY: e.clientY,
+                screenX: e.screenX,
+                screenY: e.screenY,
+                pointerId: e.pointerId,
+                pointerType: e.pointerType,
+                button: e.button,
+                buttons: e.buttons,
+                bubbles: true,
+                cancelable: true
+            };
+            this.fireEvent(new PointerEvent('click', options), {}, Component.FLAG_EVENT_POPUP | Component.FLAG_EVENT_SYNC);
         }
         this.dragging = null;
     }
@@ -432,5 +439,12 @@ ReadingPanel.ScrollOperator = class {
 };
 
 
-window.ReadingPanel = ReadingPanel;
-customElements.define('reading-panel', ReadingPanel);
+if (typeof window !== 'undefined') {
+    window.ReadingPanel = ReadingPanel;
+}
+if (typeof customElements !== 'undefined' && !customElements.get('reading-panel')) {
+    customElements.define('reading-panel', ReadingPanel);
+}
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ReadingPanel };
+}

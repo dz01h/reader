@@ -1,4 +1,6 @@
 class ReadingDocument {
+    static TOC_REGEX = /^\s*(第[零一二三四五六七八九十百千萬0-9０-９]+[章回節卷]|Chapter\s*[0-9]+|正文|楔子|前言|番外)/i;
+
     constructor(text = "", title = "", source = "") {
         this.text = text || "";
         this.title = title || "";
@@ -6,6 +8,18 @@ class ReadingDocument {
         this.chapters = [];
         this.progress = 0.0; // 0.0 ~ 1.0 (Single Source of Truth)
         this.timestamp = Date.now();
+        this._chaptersMap = null;
+    }
+
+    /**
+     * Check if a given line is a chapter title
+     * @param {string} line 
+     * @returns {boolean}
+     */
+    static isChapterTitle(line) {
+        if (!line) return false;
+        const trimmed = line.trim();
+        return trimmed.length > 0 && trimmed.length < 50 && ReadingDocument.TOC_REGEX.test(trimmed);
     }
 
     /**
@@ -19,6 +33,7 @@ class ReadingDocument {
         this.title = title || "";
         this.source = source || "";
         this.chapters = [];
+        this._chaptersMap = null;
         this.progress = 0.0;
         this.timestamp = Date.now();
     }
@@ -28,6 +43,46 @@ class ReadingDocument {
      */
     get totalLength() {
         return this.text.length;
+    }
+
+    /**
+     * Get all chapters as a mapping of { [chapterTitle: string]: progress<double> }
+     * @returns {Record<string, number>}
+     */
+    getChapters() {
+        if (this._chaptersMap) {
+            return this._chaptersMap;
+        }
+
+        const map = {};
+        this.chapters = [];
+        const totalLen = this.text.length;
+
+        if (totalLen === 0) {
+            this._chaptersMap = map;
+            return map;
+        }
+
+        const lines = this.text.split('\n');
+        let charIndex = 0;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+            if (ReadingDocument.isChapterTitle(trimmed)) {
+                const prog = charIndex / totalLen;
+                map[trimmed] = prog;
+                this.chapters.push({
+                    title: trimmed,
+                    progress: prog,
+                    charOffset: charIndex
+                });
+            }
+            charIndex += line.length + 1; // +1 for '\n'
+        }
+
+        this._chaptersMap = map;
+        return map;
     }
 
     /**
@@ -132,10 +187,14 @@ class ReadingDocument {
     /**
      * Get current chapter info corresponding to a progress ratio
      * @param {number} [prog] Defaults to this.progress
-     * @returns {{ title: string, charOffset: number } | null}
+     * @returns {{ title: string, progress: number, charOffset: number } | null}
      */
     getCurrentChapter(prog = this.progress) {
+        if (!this._chaptersMap) {
+            this.getChapters();
+        }
         if (!this.chapters || this.chapters.length === 0) return null;
+
         const targetOffset = this.getCharOffset(prog);
         let currentChapter = this.chapters[0];
 
@@ -151,4 +210,10 @@ class ReadingDocument {
     }
 }
 
-window.ReadingDocument = ReadingDocument;
+if (typeof window !== 'undefined') {
+    window.ReadingDocument = ReadingDocument;
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { ReadingDocument };
+}

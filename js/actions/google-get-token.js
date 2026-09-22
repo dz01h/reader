@@ -39,25 +39,39 @@ export class ActionGoogleGetToken extends Action {
         }
     }
 
+    dispatchTokenStatus(status, message = '', token = null) {
+        if (typeof document !== 'undefined' && document.body) {
+            document.body.dispatchEvent(new CustomEvent('GoogleTokenStatus', {
+                detail: { status, message, token },
+                bubbles: true
+            }));
+        }
+    }
+
     async _fetchToken() {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+            this.dispatchTokenStatus('offline', '目前為離線狀態');
+            console.warn('[GoogleGetToken] 目前為離線狀態，無法取得新 token');
+            return null;
+        }
+
         // 1. 檢查現有 token
         const currentToken = getStoredGoogleToken();
         if (currentToken) {
+            this.dispatchTokenStatus('testing', '正在驗證現有 Token 有效性...');
             const tokenInfo = await validateGoogleToken(currentToken);
             if (tokenInfo && tokenInfo.valid) {
                 console.log(`[GoogleGetToken] 現有 token 驗證有效 (剩餘: ${tokenInfo.expiresIn} 秒)`);
                 const authObj = saveGoogleToken(currentToken, tokenInfo.expiresIn);
+                this.dispatchTokenStatus('valid', 'Token 驗證有效', currentToken);
                 dispatchGoogleApiReady(currentToken, authObj);
                 return currentToken;
             }
             console.log('[GoogleGetToken] 現有 token 已過期或無效，嘗試背景取得新 token...');
         }
 
-        // 2. 背景 iframe + gas
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-            console.warn('[GoogleGetToken] 目前為離線狀態，無法取得新 token');
-            return null;
-        }
+        // 2. 背景 iframe + gas 取得新 token
+        this.dispatchTokenStatus('fetching', '正在嘗試取得新 Token...');
 
         try {
             const data = await authSilent();
@@ -66,6 +80,7 @@ export class ActionGoogleGetToken extends Action {
                 console.log('[GoogleGetToken] 成功透過背景 iframe 取得新 token');
                 // 3. 更新 _app 並發布事件
                 const authObj = saveGoogleToken(data);
+                this.dispatchTokenStatus('valid', '成功取得可用 Token', token);
                 dispatchGoogleApiReady(token, authObj);
                 return token;
             }
@@ -73,6 +88,7 @@ export class ActionGoogleGetToken extends Action {
             console.warn('[GoogleGetToken] 背景靜默取得 token 失敗:', err);
         }
 
+        this.dispatchTokenStatus('none', '未取得可用 Token / 授權失效');
         return null;
     }
 }

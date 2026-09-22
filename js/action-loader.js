@@ -4,6 +4,10 @@ import { OpenSettingDialog } from './actions/open-setting-dialog.js';
 import { ActionFilepanelSort } from './actions/filepanel-sort.js';
 import { ActionGoogleGetToken } from './actions/google-get-token.js';
 import { ActionGoogleLogin } from './actions/google-login.js';
+import { ActionCloseReadingFile } from './actions/close-reading-file.js';
+import { ActionToggleChapterSelector } from './actions/toggle-chapter-selector.js';
+import { ActionOpenExplorerDialog } from './actions/open-explorer-dialog.js';
+import { ActionLocalReadingProgress } from './actions/local-reading-progress.js';
 
 // 註冊 actions 資料夾中的模組清單
 const actionModules = [
@@ -11,7 +15,11 @@ const actionModules = [
     { name: 'open-setting-dialog', module: { OpenSettingDialog } },
     { name: 'filepanel-sort', module: { ActionFilepanelSort } },
     { name: 'google-get-token', module: { ActionGoogleGetToken } },
-    { name: 'google-login', module: { ActionGoogleLogin } }
+    { name: 'google-login', module: { ActionGoogleLogin } },
+    { name: 'close-reading-file', module: { ActionCloseReadingFile } },
+    { name: 'toggle-chapter-selector', module: { ActionToggleChapterSelector } },
+    { name: 'open-explorer-dialog', module: { ActionOpenExplorerDialog } },
+    { name: 'local-reading-progress', module: { ActionLocalReadingProgress } }
 ];
 
 export class ActionLoader {

@@ -9,7 +9,6 @@ class TextRenderEngine {
         this.writingMode = options.writingMode || 'horizontal'; // 'horizontal' | 'vertical'
 
         // Layout & Segmentation Rules (from ZenEngine)
-        this.tocRegex = /^\s*(第[零一二三四五六七八九十百千萬0-9０-９]+[章回節卷]|Chapter\s*[0-9]+|正文|楔子|前言|番外)/i;
         this.forceRotateRegex = /^[(){}\[\]〈〉《》「」『』【】〔〕〖〗〘〙〚〛〜︗︘︵︶︷︸︹︺︻︼︽︾︿﹀﹁﹂﹃﹄﹇﹈﹙﹚﹛﹜﹝﹞（）［］｛｝～｟｠｢｣—…｜～]$/;
 
         // Kinsoku Shori (避頭尾規則)

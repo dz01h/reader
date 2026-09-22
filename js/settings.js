@@ -126,7 +126,7 @@ class SettingPanel extends HTMLElement {
     }
 
     get app() {
-        return window._app || window.readerApp || null;
+        return window._app || null;
     }
 
     connectedCallback() {
@@ -691,7 +691,9 @@ class SettingPanel extends HTMLElement {
             this.app.gdrive.handleAuthClick().then(() => {
                 this.app.showToast('Google 帳號登入成功');
                 this.syncUI();
-                this.app.checkAndSyncCloudProgress();
+                if (typeof this.app.checkAndSyncCloudProgress === 'function') {
+                    this.app.checkAndSyncCloudProgress();
+                }
             });
         }
     }

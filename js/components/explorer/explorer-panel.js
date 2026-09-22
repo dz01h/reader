@@ -113,6 +113,13 @@ class ExplorerPanel extends Component {
                 }
             }
         });
+
+        // Close dialog when a book is read
+        document.body.addEventListener('ReadingOperation', e => {
+            if (e.detail?.action === 'read' && dialog.open) {
+                dialog.close();
+            }
+        });
     }
 
     loadData() {

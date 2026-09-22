@@ -595,6 +595,7 @@ select, input[type="text"] {
     min-height: 1cm;
 }
 
+nav-header-title,
 .document-title-header {
     font-size: 1.1rem;
     font-weight: 500;
@@ -605,6 +606,8 @@ select, input[type="text"] {
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--color-text);
+    cursor: pointer;
+    user-select: none;
 }
 
 .btn-close-header {
@@ -768,19 +771,6 @@ select, input[type="text"] {
     touch-action: none;
 }
 
-[data-writing-mode="vertical"] #progress-slider {
-    direction: rtl;
-}
-
-#progress-slider::before {
-    top: calc(100% + 0.5rem);
-    left: auto;
-    right: 0;
-    transform: none;
-    font-size: 15px;
-    line-height: 32px;
-}
-
 #page-indicator {
     font-size: 0.85rem;
     color: var(--color-text-muted);
@@ -788,6 +778,7 @@ select, input[type="text"] {
 }
 
 /* Toast */
+nav-toast,
 .toast {
     position: fixed;
     inset: unset;
@@ -805,8 +796,10 @@ select, input[type="text"] {
     border: none;
     margin: 0;
     pointer-events: none;
+    direction: ltr;
 }
 
+nav-toast.show,
 .toast.show {
     transform: translateX(-50%) translateY(0);
 }
@@ -895,6 +888,14 @@ body.reading-mode .logo {
     display: none;
 }
 
+body:not(.reading-mode) .btn-close-header {
+    display: none !important;
+}
+
+body:not(.reading-mode) .status-bar {
+    display: none !important;
+}
+
 /* File Explorer Overrides */
 .file-explorer-overlay { display: none; } /* No longer used */
 .file-explorer-modal { display: none; } /* No longer used */
@@ -953,88 +954,137 @@ body.reading-mode .logo {
     color: var(--color-text-muted);
 }
 
-/* Sync Status Indicator */
-.sync-status {
+/* Sync Status Indicator (nav-sync-status) */
+nav-sync-status {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    user-select: none;
+}
+
+.nav-sync-container {
     position: relative;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 4px 6px;
+    border-radius: var(--radius-sm);
+    transition: background-color var(--transition-fast);
 }
 
-.sync-status.hidden {
-    display: none;
+.nav-sync-container:hover {
+    background-color: var(--color-surface-hover);
 }
 
-.sync-icon {
-    width: 12px;
-    height: 12px;
+.lamp-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.status-lamp {
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
-    background-color: #cbd5e0; /* grey idle */
-    border: 2px solid rgba(255, 255, 255, 0.5);
-    box-shadow: var(--shadow-sm);
-    transition: background-color 0.3s ease, transform 0.3s ease;
+    border: 1.5px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.2);
+    transition: background-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
 }
 
-.sync-status.syncing .sync-icon {
-    background-color: #ecc94b; /* yellow */
-    animation: sync-pulse 1s infinite alternate;
+/* Lamp 1: Token Status */
+.lamp-token[data-status="none"] {
+    background-color: #f56565; /* 🔴 Red: 沒有 / 授權失效 */
 }
 
-.sync-status.success .sync-icon {
-    background-color: #48bb78; /* green */
+.lamp-token[data-status="testing"] {
+    background-color: #ecc94b; /* 🟡 Yellow: 測試是否能用 */
+    animation: sync-pulse 0.9s infinite alternate;
 }
 
-.sync-status.error .sync-icon {
-    background-color: #f56565; /* red */
+.lamp-token[data-status="fetching"] {
+    background-color: #ed8936; /* 🟠 Orange: 嘗試取得 */
+    animation: sync-pulse 0.9s infinite alternate;
 }
 
-.sync-status.offline .sync-icon {
-    background-color: #a0aec0; /* dark grey */
+.lamp-token[data-status="valid"] {
+    background-color: #48bb78; /* 🟢 Green: 成功取得可用 token */
+    box-shadow: 0 0 4px #48bb78;
 }
 
-.sync-tooltip {
+.lamp-token[data-status="offline"] {
+    background-color: #a0aec0; /* ⚪ Gray: 離線狀態 */
+}
+
+/* Lamp 2: Sync Status */
+.lamp-sync[data-status="none"] {
+    background-color: #a0aec0; /* ⚪ Gray: Token 不可用 / 未同步 */
+}
+
+.lamp-sync[data-status="syncing"] {
+    background-color: #ecc94b; /* 🟡 Yellow: 嘗試同步中 */
+    animation: sync-pulse 0.9s infinite alternate;
+}
+
+.lamp-sync[data-status="success"] {
+    background-color: #48bb78; /* 🟢 Green: 成功同步 */
+    box-shadow: 0 0 4px #48bb78;
+}
+
+.lamp-sync[data-status="error"] {
+    background-color: #f56565; /* 🔴 Red: 同步失敗 */
+}
+
+/* Tooltip */
+.nav-sync-status .sync-tooltip {
     position: absolute;
-    bottom: 1.5rem;
+    bottom: calc(100% + 8px);
     right: 50%;
     transform: translateX(50%);
     background-color: var(--color-surface);
     color: var(--color-text);
-    padding: 0.75rem;
+    padding: 0.6rem 0.8rem;
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-md);
     font-size: 0.8rem;
     white-space: nowrap;
     opacity: 0;
     visibility: hidden;
-    transition: opacity 0.2s ease, visibility 0.2s ease;
+    transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
     border: 1px solid var(--color-border);
     pointer-events: none;
     z-index: 2001;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
 }
 
-.sync-status:hover .sync-tooltip,
-.sync-status:active .sync-tooltip {
+.nav-sync-container:hover .sync-tooltip,
+.nav-sync-container:active .sync-tooltip {
     opacity: 1;
     visibility: visible;
+    transform: translateX(50%) translateY(-2px);
 }
 
-#sync-time {
+.nav-sync-status .tooltip-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.nav-sync-status .tooltip-label {
     font-weight: 600;
-    margin-bottom: 0.25rem;
+    color: var(--color-text-muted);
+    min-width: 42px;
 }
 
-#sync-msg {
-    color: var(--color-text-muted);
-    max-width: 250px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: normal;
+.nav-sync-status .tooltip-val {
+    color: var(--color-text);
 }
 
 @keyframes sync-pulse {
-    from { transform: scale(1); opacity: 0.8; }
-    to { transform: scale(1.3); opacity: 1; }
+    from { transform: scale(1); opacity: 0.75; }
+    to { transform: scale(1.25); opacity: 1; }
 }
 
 
