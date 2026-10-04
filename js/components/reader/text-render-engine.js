@@ -303,6 +303,7 @@ class TextRenderEngine {
         rawData.zeroIndex = formattedZeroIndex;
         rawData.totalLines = formattedLines.length;
         rawData.totalLength = rawData.totalLength || doc.text.length;
+        rawData.linesPerPage = this.linesPerPage;
 
         this.renderCache = rawData;
 

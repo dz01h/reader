@@ -37,6 +37,10 @@ class ReadingPanel extends Component {
                 this[e.detail.action](...(e.detail.params ?? []));
             }
         });
+
+        // TTS SpeachOver / SpeechOver Event Listener
+        document.body.addEventListener('SpeachOver', (e) => this.onSpeachOver(e));
+        document.body.addEventListener('SpeechOver', (e) => this.onSpeachOver(e));
     }
 
     read(doc) {
@@ -307,6 +311,39 @@ class ReadingPanel extends Component {
 
     prevPage() {
         this.executeAction('prev');
+    }
+
+    /**
+     * Handle SpeachOver event from NavTtsButton
+     * Automatically turn page when spoken text position reaches the end of current page
+     * @param {CustomEvent} e
+     */
+    onSpeachOver(e) {
+        if (!e.detail || typeof e.detail.endCharIndex !== 'number') return;
+        if (!this.doc || !this.engine) return;
+
+        const renderData = this.engine.getRenderData(this.doc);
+        if (!renderData || !renderData.lines || renderData.lines.length === 0) return;
+
+        const linesPerPage = renderData.linesPerPage || this.engine.linesPerPage || 1;
+        const zeroIndex = renderData.zeroIndex || 0;
+        const lastLineIdx = Math.min(renderData.lines.length - 1, zeroIndex + linesPerPage - 1);
+
+        let lastLineEnd = 0;
+        if (renderData.lineIndexs && typeof renderData.lineIndexs[lastLineIdx] === 'number') {
+            const lineStart = renderData.lineIndexs[lastLineIdx];
+            const lineLen = typeof renderData.lines[lastLineIdx] === 'string'
+                ? renderData.lines[lastLineIdx].length
+                : (renderData.lines[lastLineIdx]?.length ?? 0);
+            lastLineEnd = lineStart + lineLen;
+        } else {
+            return;
+        }
+
+        // When sentence end reaches or exceeds the end of the last line on current page
+        if (e.detail.endCharIndex >= lastLineEnd) {
+            this.nextPage();
+        }
     }
 
     executeAction(action) {
