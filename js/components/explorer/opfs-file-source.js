@@ -169,3 +169,4 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 customElements.define('opfs-file-source', OPFSFileSource);
+OPFSFileSource.bindGlobalEvents();

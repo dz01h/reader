@@ -5,18 +5,20 @@ class ExplorerPanel extends Component {
     }
 
     connectedCallback() {
+        if (!this.filePanel) {
+            this.filePanel = this.querySelector('file-panel');
+            if (!this.filePanel) {
+                this.filePanel = document.createElement('file-panel');
+                this.appendChild(this.filePanel);
+            }
+        }
         this.bindParentDialog();
         this.bindBodyDragAndDrop();
         this.loadData();
     }
 
     initComponent() {
-        // File Panel embedding
-        this.filePanel = this.querySelector('file-panel');
-        if (!this.filePanel) {
-            this.filePanel = document.createElement('file-panel');
-            this.appendChild(this.filePanel);
-        }
+        this.bindUploadAction();
     }
 
     bindBodyDragAndDrop() {
@@ -80,6 +82,43 @@ class ExplorerPanel extends Component {
         });
     }
 
+    bindUploadAction() {
+        if (this._uploadActionBound) return;
+        this._uploadActionBound = true;
+
+        document.body.addEventListener('ActionPerformed', async (e) => {
+            if (e.detail?.action === 'load-local-files') {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.txt,.zip';
+                input.multiple = true;
+                input.onchange = async () => {
+                    const files = Array.from(input.files || []);
+                    if (files.length === 0) return;
+                    try {
+                        await this.openFile(files[0]);
+                        if (files.length > 1 && window.ZenOPFS && typeof window.ZenOPFS.saveFile === 'function') {
+                            for (let i = 1; i < files.length; i++) {
+                                const file = files[i];
+                                if (file.name.toLowerCase().endsWith('.txt')) {
+                                    const text = await file.text();
+                                    await window.ZenOPFS.saveFile(file.name, text);
+                                }
+                            }
+                            if (this.filePanel && typeof this.filePanel.refresh === 'function') {
+                                this.filePanel.refresh();
+                            }
+                        }
+                    } catch (err) {
+                        console.error('[ExplorerPanel] 本機檔案載入失敗:', err);
+                        alert(`開啟檔案失敗: ${err.message}`);
+                    }
+                };
+                input.click();
+            }
+        });
+    }
+
     bindParentDialog() {
         const dialog = this.parentElement || this.closest?.('dialog');
         if (!dialog || dialog._explorerPanelBound) return;
@@ -123,11 +162,22 @@ class ExplorerPanel extends Component {
     }
 
     loadData() {
+        if (!this.filePanel) {
+            this.filePanel = this.querySelector('file-panel');
+        }
         if (this.filePanel && typeof this.filePanel.refresh === 'function') {
-            if(!this.filePanel.source)
-                this.filePanel.setSource(FileSource.getInstance());
-            else
+            if (!this.filePanel.source) {
+                const src = (typeof FileSource !== 'undefined' && typeof FileSource.getInstance === 'function')
+                    ? FileSource.getInstance()
+                    : null;
+                if (src) {
+                    this.filePanel.setSource(src);
+                } else {
+                    this.filePanel.refresh();
+                }
+            } else {
                 this.filePanel.refresh();
+            }
         }
     }
 
@@ -223,14 +273,20 @@ class ExplorerPanel extends Component {
         const doc = new window.ReadingDocument(text, filename, sourceTag);
 
         let progress = 0;
+        let ts = 0;
         if (typeof target?.progress === 'number') {
             progress = target.progress;
+            ts = target.timestamp || 0;
         } else if (window._app && window._app.positions && window._app.positions[fileId]) {
             progress = window._app.positions[fileId].progress || 0;
+            ts = window._app.positions[fileId].ts || 0;
         }
 
         if (progress > 0) {
             doc.setProgress(progress);
+        }
+        if (ts > 0) {
+            doc.timestamp = ts;
         }
 
         if (window._app) {

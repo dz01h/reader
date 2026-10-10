@@ -36,7 +36,10 @@ const translations = {
         settingMarginRight: "右邊距",
         settingTTS: "TTS 語音設定",
         settingTTSModel: '語音引擎與模型',
+        ttsEngineWebSpeech: '瀏覽器原生語音 (WebSpeech)',
+        ttsEngineMatcha: 'Matcha-TTS (離線 AI 模型)',
         settingTTSSpeed: "語音速度",
+        badgeReading: '閱讀中',
 
         settingQuadrants: '點擊四象限 (隱形換頁按鈕)',
         quadTL: '左上角',
@@ -105,7 +108,10 @@ const translations = {
         settingMarginRight: '右边距',
         settingTTS: 'TTS 语音设置',
         settingTTSModel: '语音引擎与模型',
+        ttsEngineWebSpeech: '浏览器原生语音 (WebSpeech)',
+        ttsEngineMatcha: 'Matcha-TTS (离线 AI 模型)',
         settingTTSSpeed: '语音速度',
+        badgeReading: '阅读中',
 
         settingQuadrants: '点击四象限 (隐形换页按钮)',
         quadTL: '左上角',
@@ -171,7 +177,10 @@ const translations = {
         settingMarginRight: 'Right Margin',
         settingTTS: 'TTS Voice Settings',
         settingTTSModel: 'TTS Engine & Model',
+        ttsEngineWebSpeech: 'Browser Native Speech (WebSpeech)',
+        ttsEngineMatcha: 'Matcha-TTS (Offline AI Model)',
         settingTTSSpeed: 'Speech Rate',
+        badgeReading: 'Reading',
 
         settingQuadrants: 'Tap Quadrants (Invisible page turners)',
         quadTL: 'Top Left',
@@ -237,7 +246,10 @@ const translations = {
         settingMarginRight: '右余白',
         settingTTS: 'TTS 音声設定',
         settingTTSModel: '音声エンジンと言語モデル',
+        ttsEngineWebSpeech: 'ブラウザ標準音声 (WebSpeech)',
+        ttsEngineMatcha: 'Matcha-TTS (オフラインAIモデル)',
         settingTTSSpeed: '読み上げ速度',
+        badgeReading: '読書中',
 
         settingQuadrants: 'タップ領域 (ページめくり)',
         quadTL: '左上',

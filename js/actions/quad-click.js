@@ -4,8 +4,15 @@ export class ActionQuadClick extends Action {
 
     mountEvents() {
         document.body.addEventListener('click', e => {
-            const panel = e.target.closest('reading-panel') || (e.target.id === 'reading-panel' ? e.target : null);
-            if (panel) this.handleClick(e, panel);
+            // 注意：必須嚴格確認 e.target 本身確實是 reading-panel，不可使用 e.target.closest('reading-panel')！
+            // 理由：
+            // 1. ReadingPanel 僅在非拖曳的單純點擊 (!wasDrag) 時，才會主動對自身發射 target 為 reading-panel 的 click 事件。
+            // 2. 若使用 closest('reading-panel') 往上查找，拖曳放開時瀏覽器對 canvas 產生的原生 click，
+            //    以及點擊 panel 內部其他子元件、覆蓋層時，都會被誤判為四象限點擊而觸發非預期的翻頁。
+            const isReadingPanel = e.target.tagName?.toLowerCase() === 'reading-panel' || e.target.id === 'reading-panel';
+            if (isReadingPanel) {
+                this.handleClick(e, e.target);
+            }
         });
     }
 

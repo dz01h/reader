@@ -110,7 +110,12 @@
             <quad-actions></quad-actions>
             <fieldset class="setting-fieldset">
                 <legend data-i18n="settingTTS"></legend>
-                <list-selector field="ttsModel" value="" data-i18n="settingTTSModel">{}</list-selector>
+                <list-selector field="ttsEngine" value="webspeech" data-i18n="settingTTSModel">
+                    {
+                        "webspeech": "$ttsEngineWebSpeech",
+                        "matcha": "$ttsEngineMatcha"
+                    }
+                </list-selector>
                 <range-slider field="ttsSpeed" min="0.5" max="2.0" step="0.1" value="1.0" data-i18n="settingTTSSpeed"></range-slider>
             </fieldset>
             <fieldset class="setting-fieldset">
@@ -205,7 +210,6 @@
     <script src="js/components/explorer/gdrive-file-source.js"></script>
     <script src="js/components/explorer/file-panel.js"></script>
     <script src="js/components/explorer/explorer-panel.js"></script>
-    <script src="js/file-explorer.js"></script>
     <script src="js/utils/zip-handler.js"></script>
     <script src="js/services/gdrive.js"></script>
     <script src="js/app.js"></script>

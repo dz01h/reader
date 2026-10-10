@@ -19,7 +19,31 @@ class FileSource extends ToggleButton {
     }
 
     static getInstance() {
-        return document.querySelector('.file-source:has(:checked)');
+        if (typeof document === 'undefined') return null;
+
+        // 1. Check if any file-source radio is currently checked in memory or attributes
+        const sources = document.querySelectorAll('.file-source, opfs-file-source, gdrive-file-source');
+        for (const src of sources) {
+            if (src.switching && src.switching.checked) {
+                return src;
+            }
+            if (src.hasAttribute && src.hasAttribute('checked')) {
+                return src;
+            }
+        }
+
+        // 2. Query selector fallback for input:checked
+        const checkedInput = document.querySelector('.file-source input[type="radio"]:checked');
+        if (checkedInput) {
+            const src = checkedInput.closest('.file-source') || checkedInput.parentElement;
+            if (src) return src;
+        }
+
+        // 3. Fallback to default OPFS element in DOM
+        return document.getElementById('btn-recent-books') ||
+               document.querySelector('opfs-file-source') ||
+               document.querySelector('.file-source') ||
+               null;
     }
 
     /**

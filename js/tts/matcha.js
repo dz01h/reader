@@ -243,6 +243,84 @@ class ZenTTSMatcha {
         }
     }
 
+    prefetchSentence(text) {
+        if (!text) return Promise.resolve(null);
+        const voiceId = this.app?.ttsVoice || 'matcha-icefall-zh-en:0';
+        const { modelKey } = this._parseVoiceId(voiceId);
+
+        let item = this.voicePool.get(text);
+        if (!item) {
+            let resolveFunc = null;
+            const promise = new Promise(r => resolveFunc = r);
+            item = { status: 'pending', buffer: null, promise, resolve: resolveFunc };
+            this.voicePool.set(text, item);
+
+            this._ensureModelLoaded(modelKey).then(() => {
+                this._dispatch();
+            }).catch(err => {
+                console.warn('[ZenTTSMatcha] Prefetch ensureModelLoaded error:', err);
+            });
+        }
+        return item.promise;
+    }
+
+    async speakSentence(text, onProgress = null) {
+        if (!text) return;
+        const voiceId = this.app?.ttsVoice || 'matcha-icefall-zh-en:0';
+        const { modelKey } = this._parseVoiceId(voiceId);
+        try {
+            await this._ensureModelLoaded(modelKey);
+        } catch (e) {
+            console.error('[ZenTTSMatcha] Failed to load model for speakSentence:', e);
+            return;
+        }
+
+        let item = this.voicePool.get(text);
+        if (!item) {
+            let resolveFunc = null;
+            const promise = new Promise(r => resolveFunc = r);
+            item = { status: 'pending', buffer: null, promise, resolve: resolveFunc };
+            this.voicePool.set(text, item);
+            this._dispatch();
+        }
+
+        const audioBuffer = await this.getVoiceFromPool(text);
+        if (!audioBuffer) return;
+
+        return new Promise(resolve => {
+            const source = this.playBuffer(audioBuffer);
+            const startTime = this.audioCtx ? this.audioCtx.currentTime : 0;
+            const duration = audioBuffer.duration;
+            let timerId = null;
+
+            if (typeof onProgress === 'function' && duration > 0 && text.length > 0 && this.audioCtx) {
+                const intervalMs = Math.max(30, Math.floor((duration * 1000) / text.length));
+                let lastIdx = -1;
+                timerId = setInterval(() => {
+                    if (!this.audioCtx || this.audioCtx.state !== 'running') return;
+                    const elapsed = this.audioCtx.currentTime - startTime;
+                    const ratio = Math.min(1, elapsed / duration);
+                    const idx = Math.min(text.length - 1, Math.floor(ratio * text.length));
+                    if (idx !== lastIdx && idx >= 0 && idx < text.length) {
+                        lastIdx = idx;
+                        onProgress(idx, text[idx] || '');
+                    }
+                    if (ratio >= 1) {
+                        clearInterval(timerId);
+                        timerId = null;
+                    }
+                }, intervalMs);
+            }
+
+            const originalOnEnded = source.onended;
+            source.onended = (e) => {
+                if (timerId) clearInterval(timerId);
+                if (originalOnEnded) originalOnEnded(e);
+                setTimeout(resolve, 80);
+            };
+        });
+    }
+
     destroy() {
         this.stopAudio(true);
         if (this.pool) {

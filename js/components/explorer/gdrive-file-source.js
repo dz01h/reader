@@ -76,6 +76,7 @@ class GDriveFileSource extends (window.FileSource || class {}) {
      * @returns {Promise<Array<{ id: string, name: string, type: 'file'|'folder', size?: number, lastModified?: number, progress?: number, progressTimestamp?: number, mimeType?: string }>>}
      */
     async listFiles() {
+        const helper = this.getAuthHelper();
         const token = await this.getAccessToken();
         if (!token) {
             if (window._app && typeof window._app.showToast === 'function') {

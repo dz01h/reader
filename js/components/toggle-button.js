@@ -57,21 +57,40 @@ class ToggleButton extends ActionButton {
     triggerAction() {
         if (this.hasAttribute('disabled')) return;
         
-        const checked = this.switching.checked;
+        const checked = this.switching ? this.switching.checked : this.hasAttribute('checked');
 
-        this.switching.checked = true;
+        if (this.switching) {
+            this.switching.checked = true;
+            this.switching.setAttribute('checked', '');
+        }
+        this.setAttribute('checked', '');
+
+        // If this toggle is part of a radio group (shared name), uncheck siblings
+        const groupName = this.switching?.name || this.getAttribute('name');
+        if (groupName && typeof document !== 'undefined') {
+            const groupSiblings = document.querySelectorAll(`toggle-button, .file-source, opfs-file-source, gdrive-file-source`);
+            groupSiblings.forEach(el => {
+                if (el !== this && (el.getAttribute('name') === groupName || el.switching?.name === groupName)) {
+                    el.removeAttribute('checked');
+                    if (el.switching) {
+                        el.switching.checked = false;
+                        el.switching.removeAttribute('checked');
+                    }
+                }
+            });
+        }
 
         const action = this.getAttribute('action');
         if (!action) return;
 
         const detail = {
             action: action,
-            value: this.switching.value ?? '',
+            value: this.switching?.value ?? this.getAttribute('value') ?? '',
             checked: checked
         };
 
         // Dispatch on the button itself (bubbles up)
-        this.fireEvent('ActionPerformed', detail, true);
+        this.fireEvent('ActionPerformed', detail, Component.FLAG_EVENT_POPUP | Component.FLAG_EVENT_SYNC);
     }
 }
 

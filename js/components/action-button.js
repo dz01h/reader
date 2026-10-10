@@ -58,6 +58,7 @@ class ActionButton extends Component {
 
     triggerAction() {
         if (this.hasAttribute('disabled')) return;
+        this._lastActionTrigger = Date.now();
         const action = this.getAttribute('action');
         if (!action) return;
 
@@ -120,13 +121,14 @@ class ActionButton extends Component {
             }
         });
 
-        // Fallback for click if pointerup wasn't triggered
+        // Fallback for click if pointerup wasn't triggered or on touch / keyboard
         this.addEventListener('click', (e) => {
             if (this.hasAttribute('disabled')) return;
-            // Prevent double triggers if pointerup already handled it
-            if (e.detail === 0) { // Keyboard triggered click
-                this.triggerAction();
+            // Prevent double triggers if pointerup already handled it within 350ms
+            if (this._lastActionTrigger && (Date.now() - this._lastActionTrigger < 350)) {
+                return;
             }
+            this.triggerAction();
         });
 
         // Keyboard handling

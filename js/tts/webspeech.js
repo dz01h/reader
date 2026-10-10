@@ -60,6 +60,39 @@ class ZenTTSWebSpeech {
         this.synth.resume();
     }
 
+    async speakSentence(text, onProgress = null) {
+        if (!text) return;
+        return new Promise((resolve) => {
+            const utterance = new SpeechSynthesisUtterance(text);
+            const voices = this.synth.getVoices();
+            if (this.app?.ttsVoice && voices.length > 0) {
+                const selectedVoice = voices.find(v => v.voiceURI === this.app.ttsVoice || v.name === this.app.ttsVoice);
+                if (selectedVoice) {
+                    utterance.voice = selectedVoice;
+                }
+            }
+            utterance.rate = this.app?.ttsSpeed || 1.0;
+            if (typeof onProgress === 'function') {
+                utterance.onboundary = (e) => {
+                    const idx = (typeof e.charIndex === 'number' && e.charIndex >= 0 && e.charIndex < text.length)
+                        ? e.charIndex
+                        : 0;
+                    onProgress(idx, text[idx] || '');
+                };
+            }
+            utterance.onend = () => {
+                setTimeout(resolve, 80);
+            };
+            utterance.onerror = (e) => {
+                if (e.error !== 'interrupted' && e.error !== 'canceled') {
+                    console.error("WebSpeech API Error:", e);
+                }
+                resolve();
+            };
+            this.synth.speak(utterance);
+        });
+    }
+
     destroy() {
         this.stopAudio(true);
     }
@@ -100,7 +133,9 @@ class ZenTTSWebSpeechChunks extends ZenTTSChunker {
             
             // Handle error gracefully so the playback loop doesn't get stuck
             utterance.onerror = (e) => {
-                console.error("WebSpeech API Error:", e);
+                if (e.error !== 'interrupted' && e.error !== 'canceled') {
+                    console.error("WebSpeech API Error:", e);
+                }
                 resolve();
             };
 

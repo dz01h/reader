@@ -38,6 +38,9 @@ class ReadingPanel extends Component {
             }
         });
 
+        // TTSEvent Event Listener (Character-level precision auto-pagination)
+        document.body.addEventListener('TTSEvent', (e) => this.onTTSEvent(e));
+
         // TTS SpeachOver / SpeechOver Event Listener
         document.body.addEventListener('SpeachOver', (e) => this.onSpeachOver(e));
         document.body.addEventListener('SpeechOver', (e) => this.onSpeachOver(e));
@@ -49,6 +52,9 @@ class ReadingPanel extends Component {
         if (this.inertiaFrameId) {
             cancelAnimationFrame(this.inertiaFrameId);
             this.inertiaFrameId = null;
+        }
+        if (window._app && doc?.title) {
+            window._app.lastBookId = doc.title;
         }
         this.resize();
     }
@@ -148,7 +154,7 @@ class ReadingPanel extends Component {
 
         for(let k in options) op[k] = options[k];
 
-        this.engine.render(
+        const rendingData = this.engine.render(
             this.ctx,
             this.doc,
             offset,
@@ -157,8 +163,35 @@ class ReadingPanel extends Component {
 
         // Fire ReadingPanelRenderOver event with visible text ONLY when stable (debounced / committed)
         if (stable) {
-            const rendingData = this.engine.getRenderData(this.doc);
+            this.saveProgress();
             this.fireEvent('ReadingPanelRenderOver', rendingData, true);
+        }
+    }
+
+    saveProgress() {
+        if (!this.doc || !this.doc.title || this.doc.title === 'document.txt') return;
+        try {
+            const stateKey = (window.ZenReaderApp && window.ZenReaderApp.STATE_KEY) || 'zen_reader_state';
+            const raw = localStorage.getItem(stateKey) || localStorage.getItem('reader_status');
+            let state = raw ? JSON.parse(raw) : {};
+            if (!state.positions) state.positions = {};
+
+            const filename = this.doc.title;
+            const progress = Math.max(0, Math.min(1, typeof this.doc.progress === 'number' ? this.doc.progress : 0));
+            const ts = Date.now();
+
+            state.positions[filename] = { progress, ts };
+            state.lastBookId = filename;
+
+            localStorage.setItem(stateKey, JSON.stringify(state));
+
+            if (window._app) {
+                window._app.lastBookId = filename;
+                if (!window._app.positions) window._app.positions = {};
+                window._app.positions[filename] = { progress, ts };
+            }
+        } catch (e) {
+            console.warn('[ReadingPanel] 儲存閱讀進度失敗:', e);
         }
     }
 
@@ -272,9 +305,10 @@ class ReadingPanel extends Component {
      * Snap displacement to nearest line and commit new progress to ReadingDocument
      * Returns the residual scroll offset (the gap between current scrollOffset and the snapped line position).
      * @param {number} scrollOffset
+     * @param {number} paintStable
      * @returns {number} Residual scroll offset in pixels
      */
-    commitScroll(scrollOffset = 0) {
+    commitScroll(scrollOffset = 0, paintStable = true) {
         if (!this.doc || !this.engine) return 0;
 
         const lineHeight = this.engine.lineHeight;
@@ -301,7 +335,7 @@ class ReadingPanel extends Component {
         // 計算未被吸收的殘留位移差距 (residual offset)
         const residualOffset = scrollOffset - snappedPixels;
 
-        this.render(true);
+        this.render(paintStable);
         return residualOffset;
     }
 
@@ -311,6 +345,41 @@ class ReadingPanel extends Component {
 
     prevPage() {
         this.executeAction('prev');
+    }
+
+    /**
+     * Handle TTSEvent from NavTtsButton
+     * Automatically turn page when spoken character position reaches or exceeds the end of current page
+     * @param {CustomEvent} e
+     */
+    onTTSEvent(e) {
+        if (!e.detail || typeof e.detail.charIndex !== 'number') return;
+        if (!this.doc || !this.engine) return;
+
+        const renderData = this.engine.getRenderData(this.doc);
+        if (!renderData || !renderData.lines || renderData.lines.length === 0) return;
+
+        const linesPerPage = renderData.linesPerPage || this.engine.linesPerPage || 1;
+        const zeroIndex = renderData.zeroIndex || 0;
+        const lastLineIdx = Math.min(renderData.lines.length - 1, zeroIndex + linesPerPage - 1);
+
+        let lastLineEnd = 0;
+        if (renderData.lineIndexs && typeof renderData.lineIndexs[lastLineIdx] === 'number') {
+            const lineStart = renderData.lineIndexs[lastLineIdx];
+            const lineText = typeof renderData.lines[lastLineIdx] === 'string' ? renderData.lines[lastLineIdx] : '';
+            const lineLen = lineText.trimEnd().length;
+            lastLineEnd = lineStart + lineLen;
+        } else {
+            return;
+        }
+
+        // When the currently spoken character index reaches or exceeds the last character of the visible page
+        if (e.detail.charIndex >= lastLineEnd - 1) {
+            const now = Date.now();
+            if (this._lastTtsTurn && now - this._lastTtsTurn < 500) return;
+            this._lastTtsTurn = now;
+            this.nextPage();
+        }
     }
 
     /**
@@ -332,16 +401,15 @@ class ReadingPanel extends Component {
         let lastLineEnd = 0;
         if (renderData.lineIndexs && typeof renderData.lineIndexs[lastLineIdx] === 'number') {
             const lineStart = renderData.lineIndexs[lastLineIdx];
-            const lineLen = typeof renderData.lines[lastLineIdx] === 'string'
-                ? renderData.lines[lastLineIdx].length
-                : (renderData.lines[lastLineIdx]?.length ?? 0);
+            const lineText = typeof renderData.lines[lastLineIdx] === 'string' ? renderData.lines[lastLineIdx] : '';
+            const lineLen = lineText.trimEnd().length;
             lastLineEnd = lineStart + lineLen;
         } else {
             return;
         }
 
         // When sentence end reaches or exceeds the end of the last line on current page
-        if (e.detail.endCharIndex >= lastLineEnd) {
+        if (e.detail.endCharIndex >= lastLineEnd - 1) {
             this.nextPage();
         }
     }
@@ -385,7 +453,7 @@ ReadingPanel.ScrollOperator = class {
         if (self.instance) {
             const last = self.instance;
             last.finish();
-            off = last.target.parentElement.commitScroll(last.scrollOffset);
+            off = last.target.parentElement.commitScroll(last.scrollOffset, false);
         }
         self.instance = new ReadingPanel.ScrollOperator(e, off);
         return self.instance;
@@ -423,7 +491,7 @@ ReadingPanel.ScrollOperator = class {
         // 拖曳距離過長時（超過 20 行），在拖曳途中平滑換窗
         const lineHeight = parent && parent.engine ? parent.engine.lineHeight : 32;
         if (Math.abs(this.scrollOffset) > 20 * lineHeight) {
-            this.initOffset = parent.commitScroll(this.scrollOffset);
+            this.initOffset = parent.commitScroll(this.scrollOffset, false);
             this.startPos = currentPE.pos;
             this.scrollOffset = this.initOffset;
         }
@@ -454,7 +522,7 @@ ReadingPanel.ScrollOperator = class {
                 // 當慣性位移超過 20 行時，在飛行中平滑 Commit 一次，重置視窗中心
                 if (Math.abs(this.scrollOffset) > 20 * lineHeight) {
                     const prevOffset = this.scrollOffset;
-                    this.scrollOffset = parent.commitScroll(this.scrollOffset);
+                    this.scrollOffset = parent.commitScroll(this.scrollOffset, false);
                     // 若已到達整本書的最前端或最後端（無法再推進），給予速度阻尼
                     if (Math.abs(this.scrollOffset - prevOffset) < 1) {
                         this.velocity *= 0.5;

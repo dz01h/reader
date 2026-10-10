@@ -10,6 +10,8 @@ import { ActionOpenExplorerDialog } from './actions/open-explorer-dialog.js';
 import { ActionLocalReadingProgress } from './actions/local-reading-progress.js';
 import { ActionOpenReadingLog } from './actions/open-reading-log.js';
 import { ActionClearCache } from './actions/clear-cache.js';
+import { ActionToggleTTS } from './actions/toggle-tts.js';
+import { ActionMobileBack } from './actions/mobile-back.js';
 
 // 註冊 actions 資料夾中的模組清單
 const actionModules = [
@@ -23,7 +25,9 @@ const actionModules = [
     { name: 'open-explorer-dialog', module: { ActionOpenExplorerDialog } },
     { name: 'local-reading-progress', module: { ActionLocalReadingProgress } },
     { name: 'open-reading-log', module: { ActionOpenReadingLog } },
-    { name: 'clear-cache', module: { ActionClearCache } }
+    { name: 'clear-cache', module: { ActionClearCache } },
+    { name: 'toggle-tts', module: { ActionToggleTTS } },
+    { name: 'mobile-back', module: { ActionMobileBack } }
 ];
 
 export class ActionLoader {

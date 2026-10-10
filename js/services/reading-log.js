@@ -503,7 +503,8 @@ class ZenReadingLog {
             
             // If local progress is 0, ignore timestamp and prefer cloud progress (if > 0)
             const isLocalEmpty = localProgress === 0;
-            const isCloudDifferent = Math.abs(remoteProgress - localProgress) > 0.00001;
+            const isCloudDifferent = Math.abs(remoteProgress - localProgress) >= 0.0001 &&
+                (remoteProgress * 100).toFixed(2) !== (localProgress * 100).toFixed(2);
             
             if ((isLocalEmpty || remoteTime > localTime) && isCloudDifferent) {
                 this.lastCloudTime = remoteTime;
@@ -570,7 +571,9 @@ class ZenReadingLog {
                 }
 
                 const remoteTimeMs = new Date(remoteTimestamp).getTime() || 0;
-                if (!force && remoteTimeMs > this.lastCloudTime && Math.abs(remoteProgress - progress) > 0.00001) {
+                const isDifferent = Math.abs(remoteProgress - progress) >= 0.0001 &&
+                    (remoteProgress * 100).toFixed(2) !== (progress * 100).toFixed(2);
+                if (!force && remoteTimeMs > this.lastCloudTime && isDifferent) {
                     console.log(`Cloud has newer progress! Cloud: ${remoteTimestamp}, Local Last Sync: ${new Date(this.lastCloudTime).toISOString()}`);
                     this.syncing = false;
                     this.lastCloudTime = remoteTimeMs;

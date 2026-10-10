@@ -21,7 +21,7 @@ export class Action {
     mountEvents() {
         let proto = this;
         const processedMethods = new Set();
-        const target = document.body || document;
+        const windowEvents = ['popstate', 'hashchange', 'resize', 'pagehide', 'beforeunload'];
 
         while (proto && proto !== Object.prototype) {
             const props = Object.getOwnPropertyNames(proto);
@@ -32,6 +32,7 @@ export class Action {
                     if (eventName) {
                         const handler = this[prop].bind(this);
                         this._boundHandlers.set(prop, { eventName, handler });
+                        const target = windowEvents.includes(eventName) ? window : (document.body || document);
                         target.addEventListener(eventName, handler);
                     }
                 }
@@ -42,8 +43,9 @@ export class Action {
 
     unmountEvents() {
         if (!this._boundHandlers) return;
-        const target = document.body || document;
+        const windowEvents = ['popstate', 'hashchange', 'resize', 'pagehide', 'beforeunload'];
         for (const [prop, { eventName, handler }] of this._boundHandlers.entries()) {
+            const target = windowEvents.includes(eventName) ? window : (document.body || document);
             target.removeEventListener(eventName, handler);
         }
         this._boundHandlers.clear();

@@ -30,9 +30,21 @@ export class ActionLocalReadingProgress extends Action {
             filename: doc.title,
             content: doc.rawText,
             progress: doc.progress || 0,
-            saveProgress: (prog) => {
-                if (window.DBService) {
-                    window.DBService.saveProgress(doc.title, prog);
+            timestamp: doc.timestamp || 0,
+            saveProgress: (prog, ts = Date.now()) => {
+                try {
+                    const stateKey = (window.ZenReaderApp && window.ZenReaderApp.STATE_KEY) || 'zen_reader_state';
+                    const savedState = localStorage.getItem(stateKey);
+                    let state = savedState ? JSON.parse(savedState) : {};
+                    if (!state.positions) state.positions = {};
+                    state.positions[doc.title] = { progress: prog, ts };
+                    localStorage.setItem(stateKey, JSON.stringify(state));
+                    if (app) {
+                        if (!app.positions) app.positions = {};
+                        app.positions[doc.title] = { progress: prog, ts };
+                    }
+                } catch (e) {
+                    console.error("Failed to save progress", e);
                 }
             }
         };
@@ -50,7 +62,11 @@ export class ActionLocalReadingProgress extends Action {
         }
 
         if (!history.state || history.state.reading !== true) {
-            history.pushState({ reading: true }, '', '#reading');
+            if (history.state?.zenModal) {
+                history.replaceState({ reading: true }, '', '#reading');
+            } else {
+                history.pushState({ reading: true }, '', '#reading');
+            }
         }
     }
 
@@ -62,13 +78,12 @@ export class ActionLocalReadingProgress extends Action {
         const app = window._app;
         if (!app || !app.currentBook) return;
 
+        const now = Date.now();
         app.currentBook.progress = progress;
-        app.currentBook.timestamp = Date.now();
+        app.currentBook.timestamp = now;
 
         if (typeof app.currentBook.saveProgress === 'function') {
-            app.currentBook.saveProgress(progress);
-        } else if (window.DBService && app.currentBook.filename) {
-            window.DBService.saveProgress(app.currentBook.filename, progress);
+            app.currentBook.saveProgress(progress, now);
         }
     }
 }

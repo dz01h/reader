@@ -37,6 +37,12 @@ class FilePanel extends Component {
             transform: translateY(-1px);
         }
 
+        .file-item.current-reading {
+            border-color: var(--color-primary, #667eea);
+            background-color: var(--color-primary-bg, rgba(102, 126, 234, 0.05));
+            box-shadow: 0 0 0 1px var(--color-primary, #667eea);
+        }
+
         .file-item:active {
             transform: translateY(0);
         }
@@ -70,12 +76,34 @@ class FilePanel extends Component {
         }
 
         .file-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
             font-size: 0.95rem;
             font-weight: 600;
             color: var(--color-text, #2d3748);
+            min-width: 0;
+        }
+
+        .file-name-text {
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            min-width: 0;
+        }
+
+        .badge-reading {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.15rem 0.45rem;
+            font-size: 0.72rem;
+            font-weight: 600;
+            line-height: 1.2;
+            border-radius: 4px;
+            background: var(--color-primary, #667eea);
+            color: #ffffff;
+            flex-shrink: 0;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
 
         .file-meta {
@@ -218,8 +246,10 @@ class FilePanel extends Component {
         if (!this.source) {
             const initialSource = (typeof FileSource !== 'undefined' && typeof FileSource.getInstance === 'function')
                 ? FileSource.getInstance()
-                : null;
-            this.setSource(initialSource || (window.OPFSFileSource ? new window.OPFSFileSource() : null));
+                : (document.getElementById('btn-recent-books') || (window.OPFSFileSource ? new window.OPFSFileSource() : null));
+            if (initialSource) {
+                this.setSource(initialSource);
+            }
         } else {
             this.refresh();
         }
@@ -236,8 +266,85 @@ class FilePanel extends Component {
         host.appendChild(this.container);
     }
 
+    getScrollContainer() {
+        return this.closest('explorer-panel') || (this.getRootNode && this.getRootNode().host?.closest?.('explorer-panel')) || document.querySelector('explorer-panel');
+    }
+
+    getCurrentFolderKey() {
+        const sourceId = this.source?.id || 'default';
+        const folderId = (this.source?.path && this.source.path.length > 0)
+            ? this.source.path[this.source.path.length - 1].id
+            : 'root';
+        return `${sourceId}:${folderId}`;
+    }
+
+    saveCurrentScroll() {
+        const scroller = this.getScrollContainer();
+        if (scroller) {
+            const key = this.getCurrentFolderKey();
+            if (!this.scrollCache) this.scrollCache = new Map();
+            this.scrollCache.set(key, scroller.scrollTop);
+        }
+    }
+
+    restoreCurrentScroll() {
+        const scroller = this.getScrollContainer();
+        if (scroller && this.scrollCache) {
+            const key = this.getCurrentFolderKey();
+            const saved = this.scrollCache.get(key) || 0;
+            requestAnimationFrame(() => {
+                scroller.scrollTop = saved;
+            });
+        }
+    }
+
+    async navigateBack() {
+        if (!this.source || !this.source.path || this.source.path.length === 0) {
+            return false;
+        }
+        this.saveCurrentScroll();
+        const prevDepth = this.source.path.length;
+        if (this.source.path.length === 1) {
+            await this.source.navigate('root');
+        } else {
+            const parentIndex = this.source.path.length - 2;
+            const parentSeg = this.source.path[parentIndex];
+            await this.source.navigate(parentSeg.id, parentIndex, parentSeg.name);
+        }
+        this.fireEvent('FileFolderNavigated', {
+            source: this.source,
+            fromDepth: prevDepth,
+            toDepth: this.source.path.length,
+            direction: 'back'
+        }, true);
+        await this.refresh();
+        return true;
+    }
+
     setSource(source) {
+        if (!source) {
+            source = (typeof FileSource !== 'undefined' && typeof FileSource.getInstance === 'function')
+                ? FileSource.getInstance()
+                : null;
+        }
+        if (!source && !this.source) return;
+        if (!source) {
+            this.refresh();
+            return;
+        }
+
+        this.saveCurrentScroll();
+        const prevDepth = this.source?.path?.length || 0;
         this.source = source;
+        const newDepth = this.source?.path?.length || 0;
+        if (prevDepth !== newDepth) {
+            this.fireEvent('FileFolderNavigated', {
+                source: this.source,
+                fromDepth: prevDepth,
+                toDepth: newDepth,
+                direction: newDepth < prevDepth ? 'back' : 'forward'
+            }, true);
+        }
         this.refresh();
     }
 
@@ -323,7 +430,16 @@ class FilePanel extends Component {
             rootItem.className = 'breadcrumb-item';
             rootItem.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> 根目錄`;
             rootItem.addEventListener('click', async () => {
+                this.saveCurrentScroll();
+                const prevDepth = this.source?.path?.length || 0;
                 await this.source.navigate('root');
+                this.fireEvent('FileFolderNavigated', {
+                    source: this.source,
+                    folder: { id: 'root', name: '根目錄' },
+                    fromDepth: prevDepth,
+                    toDepth: 0,
+                    direction: 'back'
+                }, true);
                 await this.refresh();
             });
             breadcrumbsEl.appendChild(rootItem);
@@ -341,7 +457,16 @@ class FilePanel extends Component {
 
                 if (!isLast) {
                     segEl.addEventListener('click', async () => {
+                        this.saveCurrentScroll();
+                        const prevDepth = this.source?.path?.length || 0;
                         await this.source.navigate(seg.id, idx, seg.name);
+                        this.fireEvent('FileFolderNavigated', {
+                            source: this.source,
+                            folder: seg,
+                            fromDepth: prevDepth,
+                            toDepth: this.source.path.length,
+                            direction: 'back'
+                        }, true);
                         await this.refresh();
                     });
                 }
@@ -402,11 +527,25 @@ class FilePanel extends Component {
                 `
                 : '';
 
+            const currentBookId = window._app?.lastBookId || '';
+            const isCurrent = !isFolder && currentBookId && (item.name === currentBookId || item.id === currentBookId);
+            if (isCurrent) {
+                itemEl.classList.add('current-reading');
+            }
+
+            const readingLabel = window.i18n ? window.i18n.t('badgeReading') : '閱讀中';
+            const badgeHtml = isCurrent
+                ? `<span class="badge-reading" data-i18n="badgeReading">${readingLabel}</span>`
+                : '';
+
             itemEl.innerHTML = `
                 <div class="file-item-left">
                     <div class="file-icon">${iconSvg}</div>
                     <div class="file-details">
-                        <div class="file-title" title="${item.name}">${item.name}</div>
+                        <div class="file-title" title="${item.name}">
+                            <span class="file-name-text">${item.name}</span>
+                            ${badgeHtml}
+                        </div>
                         <div class="file-meta">
                             ${progressHtml}
                             ${sizeText ? `<span>${sizeText}</span>` : ''}
@@ -436,11 +575,25 @@ class FilePanel extends Component {
 
             this.container.appendChild(itemEl);
         }
+
+        if (window.i18n && typeof window.i18n.applyTranslations === 'function') {
+            window.i18n.applyTranslations(this.container);
+        }
+        this.restoreCurrentScroll();
     }
 
     async handleItemClick(item) {
         if (item.type === 'folder') {
+            this.saveCurrentScroll();
+            const prevDepth = this.source?.path?.length || 0;
             await this.source.navigate(item.id, -1, item.name);
+            this.fireEvent('FileFolderNavigated', {
+                source: this.source,
+                folder: item,
+                fromDepth: prevDepth,
+                toDepth: this.source?.path?.length || 0,
+                direction: 'forward'
+            }, true);
             await this.refresh();
             return;
         }
@@ -463,6 +616,10 @@ class FilePanel extends Component {
                 const doc = new window.ReadingDocument(content, item.name || item.id, this.source?.id || 'opfs');
                 if (typeof item.progress === 'number' && item.progress > 0) {
                     doc.setProgress(item.progress);
+                }
+                const savedTs = item.timestamp || window._app?.positions?.[item.name || item.id]?.ts || 0;
+                if (savedTs > 0) {
+                    doc.timestamp = savedTs;
                 }
 
                 if (window._app) {

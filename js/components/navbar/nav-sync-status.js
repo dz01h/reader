@@ -69,6 +69,13 @@ class NavSyncStatus extends Component {
             }
         });
 
+        // Listen for readingLog (remote progress detected by background sync)
+        document.body.addEventListener('readingLog', (e) => {
+            if (e.detail && typeof e.detail.progress === 'number' && this.currentBook) {
+                this.handleRemoteProgress(e.detail);
+            }
+        });
+
         // Listen for GoogleApiReady
         document.body.addEventListener('GoogleApiReady', (e) => {
             this.setTokenStatus('valid', 'Token 驗證有效');
@@ -85,7 +92,7 @@ class NavSyncStatus extends Component {
                 this.currentBook = {
                     filename: doc.title,
                     progress: doc.progress || 0,
-                    timestamp: doc.timestamp || Date.now()
+                    timestamp: doc.timestamp || 0
                 };
                 this.lastSyncTimestamp = 0; // reset cooldown on new book
                 
@@ -269,7 +276,7 @@ class NavSyncStatus extends Component {
 
         const filename = this.currentBook.filename;
         const localProg = this.currentBook.progress || 0;
-        const localTs = this.currentBook.timestamp || Date.now();
+        const localTs = this.currentBook.timestamp || 0;
 
         this.setSyncStatus('syncing', '正在比對雲端進度...');
 
@@ -278,7 +285,7 @@ class NavSyncStatus extends Component {
             this.lastSyncTimestamp = Date.now();
 
             if (remote && remote.progress !== undefined) {
-                this.handleRemoteProgress(remote);
+                await this.handleRemoteProgress(remote);
             } else {
                 await this.performRemoteSync(filename, localProg);
             }
@@ -288,45 +295,107 @@ class NavSyncStatus extends Component {
         }
     }
 
-    handleRemoteProgress(remote) {
+    async handleRemoteProgress(remote) {
         if (!remote || remote.progress === undefined || !this.currentBook) return;
 
         const currentSavedTs = this.currentBook.timestamp || 0;
-        const localProg = this.currentBook.progress || 0;
+        const localProg = Number(this.currentBook.progress) || 0;
+        const remoteProg = Number(remote.progress) || 0;
+        const remoteTime = remote.time ? new Date(remote.time).getTime() : 0;
+        const validRemoteTime = isNaN(remoteTime) ? 0 : remoteTime;
 
         // If remote time is older or same, ignore (unless local is 0)
-        if (localProg > 0 && new Date(remote.time).getTime() <= currentSavedTs) {
+        if (localProg > 0 && validRemoteTime > 0 && validRemoteTime <= currentSavedTs) {
             this.setSyncStatus('success', '進度已為最新');
             return;
         }
 
-        if (confirm(`發現更晚的雲端進度 (${new Date(remote.time).toLocaleString()})\n進度：${(remote.progress * 100).toFixed(2)}%\n是否跳轉？`)) {
+        // If remote and local progress are the same, no need to prompt the user
+        const isSameProgress = Math.abs(remoteProg - localProg) < 0.0001 ||
+            (remoteProg * 100).toFixed(2) === (localProg * 100).toFixed(2);
+
+        if (isSameProgress) {
+            if (validRemoteTime > currentSavedTs) {
+                this.currentBook.timestamp = validRemoteTime;
+            }
+            this.setSyncStatus('success', '進度已為最新');
+            return;
+        }
+
+        const timeStr = validRemoteTime ? new Date(validRemoteTime).toLocaleString() : '';
+        const timeMsg = timeStr ? ` (${timeStr})` : '';
+
+        if (confirm(`發現更晚的雲端進度${timeMsg}\n進度：${(remoteProg * 100).toFixed(2)}%\n是否跳轉？`)) {
             document.body.dispatchEvent(new CustomEvent('ReadingOperation', {
-                detail: { action: 'setProgress', params: [remote.progress] },
+                detail: { action: 'setProgress', params: [remoteProg] },
                 bubbles: true
             }));
 
-            this.currentBook.timestamp = new Date(remote.time).getTime();
-            this.currentBook.progress = remote.progress;
-            if (window.DBService) {
-                window.DBService.saveProgress(this.currentBook.filename, remote.progress);
+            const jumpTs = validRemoteTime || Date.now();
+            this.currentBook.timestamp = jumpTs;
+            this.currentBook.progress = remoteProg;
+            const app = window._app;
+            if (app?.currentBook) {
+                app.currentBook.timestamp = jumpTs;
+                app.currentBook.progress = remoteProg;
+                if (typeof app.currentBook.saveProgress === 'function') {
+                    app.currentBook.saveProgress(remoteProg, jumpTs);
+                }
             }
             this.setSyncStatus('success', '已載入雲端最新進度');
         } else {
             // User rejected remote progress. Force overwrite the cloud with current local progress.
             const app = window._app;
             if (app?.readingLog) {
-                app.readingLog.updateSheetProgress(
-                    this.currentBook.filename,
-                    localProg,
-                    new Date().toISOString(),
-                    true
-                );
-                document.body.dispatchEvent(new CustomEvent('showInToast', {
-                    detail: { message: '已保留本機進度並覆寫雲端', duration: 2500 },
-                    bubbles: true
-                }));
-                this.setSyncStatus('success', '已覆寫雲端進度');
+                this.setSyncStatus('syncing', '正在覆寫雲端進度...');
+                try {
+                    const now = Date.now();
+                    const nowIso = new Date(now).toISOString();
+                    await app.readingLog.updateSheetProgress(
+                        this.currentBook.filename,
+                        localProg,
+                        nowIso,
+                        true
+                    );
+
+                    // 寫完後更新本地進度的更新時間
+                    this.currentBook.timestamp = now;
+                    if (app.currentBook) {
+                        app.currentBook.timestamp = now;
+                        if (typeof app.currentBook.saveProgress === 'function') {
+                            app.currentBook.saveProgress(localProg, now);
+                        }
+                    } else {
+                        try {
+                            const stateKey = (window.ZenReaderApp && window.ZenReaderApp.STATE_KEY) || 'zen_reader_state';
+                            const savedState = localStorage.getItem(stateKey);
+                            let state = savedState ? JSON.parse(savedState) : {};
+                            if (!state.positions) state.positions = {};
+                            state.positions[this.currentBook.filename] = {
+                                progress: localProg,
+                                ts: now
+                            };
+                            localStorage.setItem(stateKey, JSON.stringify(state));
+                            if (app.positions) {
+                                app.positions[this.currentBook.filename] = {
+                                    progress: localProg,
+                                    ts: now
+                                };
+                            }
+                        } catch (e) {
+                            console.error("Failed to update local progress timestamp:", e);
+                        }
+                    }
+
+                    document.body.dispatchEvent(new CustomEvent('showInToast', {
+                        detail: { message: '已保留本機進度並覆寫雲端', duration: 2500 },
+                        bubbles: true
+                    }));
+                    this.setSyncStatus('success', '已覆寫雲端進度', now);
+                } catch (err) {
+                    console.error('[NavSyncStatus] Overwrite cloud progress error:', err);
+                    this.setSyncStatus('error', err.message || '覆寫雲端失敗');
+                }
             }
         }
     }
@@ -336,8 +405,18 @@ class NavSyncStatus extends Component {
         if (!app?.readingLog) return;
         this.setSyncStatus('syncing', '正在上傳進度...');
         try {
-            await app.readingLog.updateSheetProgress(filename, progress, new Date().toISOString());
-            this.setSyncStatus('success', '同步成功');
+            const now = Date.now();
+            await app.readingLog.updateSheetProgress(filename, progress, new Date(now).toISOString());
+            if (this.currentBook && this.currentBook.filename === filename) {
+                this.currentBook.timestamp = now;
+            }
+            if (app.currentBook && app.currentBook.filename === filename) {
+                app.currentBook.timestamp = now;
+                if (typeof app.currentBook.saveProgress === 'function') {
+                    app.currentBook.saveProgress(progress, now);
+                }
+            }
+            this.setSyncStatus('success', '同步成功', now);
         } catch (err) {
             console.error('[NavSyncStatus] performRemoteSync error:', err);
             this.setSyncStatus('error', err.message || '上傳失敗');

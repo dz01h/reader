@@ -1,6 +1,6 @@
 class GDriveModule {
     constructor(app) {
-        this.app = app;
+        this.app = app || (typeof window !== 'undefined' ? window._app : null);
         this.accessToken = null;
         this.expiresAt = 0;
         this.currentPath = []; // Array of {id, name}
@@ -23,7 +23,6 @@ class GDriveModule {
         }
 
         window.addEventListener('message', this.handleAuthMessage.bind(this));
-        window.addEventListener('popstate', this.handlePopState.bind(this));
     }
 
     async ensureAuth() {
@@ -82,16 +81,14 @@ class GDriveModule {
     }
 
     handlePopState(event) {
-        if (this.app.explorer) {
+        if (this.app?.explorer?.saveScrollState) {
             this.app.explorer.saveScrollState();
         }
-        if (event.state && event.state.gdrive) {
+        if (event?.state && event.state.gdrive) {
             this.currentPath = event.state.path || [];
-            this.fetchFolder(event.state.folderId, true);
-        } else if (this.currentPath && this.currentPath.length > 0) {
-            // Popped to a non-gdrive state, reset to root if we were deep in folders
-            this.currentPath = [];
-            this.fetchFolder('root', true);
+            if (typeof this.fetchFolder === 'function') {
+                this.fetchFolder(event.state.folderId, true);
+            }
         }
     }
 

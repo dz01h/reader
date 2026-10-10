@@ -3,7 +3,7 @@ class ZenReaderApp {
     static STATE_KEY = 'zen_reader_state';
     static CONFIG_FIELDS = [
         'theme', 'lang', 'fontSize', 'writingMode', 'fontFamily', 'lineHeight', 'margins', 'wordSpacing',
-        'lastBookId', 'ttsSpeed', 'ttsVoice', 'ttsEngine', 'ttsModel',
+        'lastBookId', 'positions', 'ttsSpeed', 'ttsVoice', 'ttsEngine', 'ttsModel',
         'quadTL', 'quadTR', 'quadBL', 'quadBR', 'syncCooldown'
     ];
 
@@ -26,10 +26,11 @@ class ZenReaderApp {
         this.margins = { top: 30, bottom: 30, left: 30, right: 30 };
         this.wordSpacing = 1;
         this.lastBookId = null;
+        this.positions = {};
         this.ttsSpeed = 1.0;
         this.ttsVoice = 'zh_CN-huayan-medium';
-        this.ttsEngine = 'piper';
-        this.ttsModel = '';
+        this.ttsEngine = 'webspeech';
+        this.ttsModel = 'webspeech';
 
         // Touch Quadrants
         this.quadTL = 'prev';
@@ -42,13 +43,20 @@ class ZenReaderApp {
         this.currentBook = null;
 
         // Initialize Services
-        if (window.ZenGDrive) this.gdrive = new window.ZenGDrive();
+        if (window.ZenGDrive) this.gdrive = new window.ZenGDrive(this);
         if (window.ZenReadingLog) this.readingLog = new window.ZenReadingLog(this.gdrive);
-        if (window.ZenTTS) this.tts = new window.ZenTTS(this);
 
         // Load and apply saved configuration
         this.loadState();
         this.bindEvents();
+    }
+
+    get tts() {
+        return document.querySelector('nav-tts-button') || document.getElementById('btn-tts-toggle') || this._tts || null;
+    }
+
+    set tts(val) {
+        this._tts = val;
     }
 
     logError(msg) {
@@ -74,11 +82,57 @@ class ZenReaderApp {
                         }
                     }
                 }
+                if (!this.ttsEngine || this.ttsEngine === 'piper') {
+                    this.ttsEngine = 'webspeech';
+                }
+                this.ttsModel = this.ttsEngine;
+                if (state.positions && typeof state.positions === 'object') {
+                    this.positions = state.positions;
+                }
             }
         } catch (e) {
             console.error("Local storage error:", e);
         }
         this.applyState();
+
+        // Fallback: If lastBookId was not explicitly recorded, find the book with latest timestamp
+        if (!this.lastBookId && this.positions && typeof this.positions === 'object') {
+            let latestTs = 0;
+            let latestBook = null;
+            for (const [bookName, posInfo] of Object.entries(this.positions)) {
+                const ts = (typeof posInfo === 'object' && posInfo?.ts) ? posInfo.ts : 0;
+                if (ts >= latestTs) {
+                    latestTs = ts;
+                    latestBook = bookName;
+                }
+            }
+            if (latestBook) {
+                this.lastBookId = latestBook;
+            }
+        }
+
+        // Auto-restore last reading book from OPFS on startup
+        if (this.lastBookId && window.ZenOPFS) {
+            setTimeout(async () => {
+                try {
+                    const loadFn = window.ZenOPFS.loadFile || window.ZenOPFS.readFile;
+                    const content = await loadFn.call(window.ZenOPFS, this.lastBookId);
+                    if (content && window.ReadingDocument) {
+                        const doc = new window.ReadingDocument(content, this.lastBookId, 'opfs');
+                        const posData = this.positions?.[this.lastBookId];
+                        const pos = typeof posData === 'object' ? (posData?.progress || 0) : (posData || 0);
+                        const ts = typeof posData === 'object' ? (posData?.ts || 0) : 0;
+                        if (pos > 0) doc.setProgress(pos, ts);
+                        document.body.dispatchEvent(new CustomEvent('ReadingOperation', {
+                            detail: { action: 'read', params: [doc] },
+                            bubbles: true
+                        }));
+                    }
+                } catch (err) {
+                    console.warn('[ZenReaderApp] 自動恢復上次閱讀書籍失敗:', err);
+                }
+            }, 100);
+        }
     }
 
     applyState() {
@@ -117,6 +171,15 @@ class ZenReaderApp {
             const state = {};
             for (const k of ZenReaderApp.CONFIG_FIELDS) {
                 state[k] = this[k];
+            }
+            // Preserve positions from localStorage if not loaded in memory
+            const raw = localStorage.getItem(ZenReaderApp.STATE_KEY);
+            if (raw) {
+                const existing = JSON.parse(raw);
+                if (existing.positions) {
+                    state.positions = { ...existing.positions, ...(this.positions || {}) };
+                    this.positions = state.positions;
+                }
             }
             localStorage.setItem(ZenReaderApp.STATE_KEY, JSON.stringify(state));
         } catch (e) {
@@ -280,6 +343,23 @@ class ZenReaderApp {
         }
     }
 
+    applyLayoutChange() {
+        document.body.dispatchEvent(new CustomEvent('ReadingOperation', {
+            detail: {
+                action: 'updateConfig',
+                params: [{
+                    fontSize: this.fontSize,
+                    fontFamily: this.fontFamily,
+                    lineHeightRatio: this.lineHeight,
+                    margins: this.margins,
+                    writingMode: this.writingMode,
+                    wordSpacing: this.wordSpacing
+                }]
+            },
+            bubbles: true
+        }));
+    }
+
     // Setters
     setTheme(newTheme) {
         this.theme = newTheme;
@@ -329,12 +409,15 @@ class ZenReaderApp {
     setTTSSpeed(val) {
         this.ttsSpeed = parseFloat(val);
         this.saveState();
+        if (this.tts?.setTTSSpeed) {
+            this.tts.setTTSSpeed(val);
+        }
     }
 
     setTTSEngine(val) {
         this.ttsEngine = val;
         this.saveState();
-        if (this.tts) {
+        if (this.tts?.switchEngine) {
             this.tts.switchEngine(val);
         }
     }
@@ -342,7 +425,9 @@ class ZenReaderApp {
     setTTSVoice(val) {
         this.ttsVoice = val;
         this.saveState();
-        if (this.tts && this.tts.isPlaying) {
+        if (this.tts?.setTTSVoice) {
+            this.tts.setTTSVoice(val);
+        } else if (this.tts && this.tts.isPlaying) {
             this.tts.stop();
             this.tts.start();
         }
@@ -354,7 +439,9 @@ class ZenReaderApp {
         this.ttsVoice = voice;
         this.saveState();
 
-        if (engineChanged && this.tts) {
+        if (this.tts?.setTTSModel) {
+            this.tts.setTTSModel(engine, voice);
+        } else if (engineChanged && this.tts?.switchEngine) {
             this.tts.switchEngine(engine);
         } else if (this.tts && this.tts.isPlaying) {
             this.tts.stop();

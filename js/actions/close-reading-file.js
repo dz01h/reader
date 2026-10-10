@@ -5,7 +5,8 @@ export class ActionCloseReadingFile extends Action {
         super();
         window.addEventListener('popstate', (e) => {
             if (document.body.classList.contains('reading-mode')) {
-                if (!e.state || e.state.reading !== true) {
+                const isDialogOpen = Boolean(document.querySelector('dialog[open]'));
+                if (!isDialogOpen && (!e.state || (e.state.reading !== true && !e.state.zenModal))) {
                     this.closeReader(true);
                 }
             }

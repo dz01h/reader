@@ -92,6 +92,10 @@ class OPFSModule {
         }
     }
 
+    async readFile(filename) {
+        return await this.loadFile(filename);
+    }
+
     async deleteFile(filename) {
         if (!this.isSupported()) return false;
         try {
@@ -111,17 +115,39 @@ class OPFSModule {
             const dir = await this.getDir();
             if (!dir) return [];
             const files = [];
-            for await (const entry of dir.values()) {
-                if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.txt')) {
-                    const fileHandle = await dir.getFileHandle(entry.name);
-                    const file = await fileHandle.getFile();
-                    files.push({
-                        name: entry.name,
-                        lastModified: file.lastModified,
-                        size: file.size
-                    });
+
+            if (typeof dir.values === 'function') {
+                for await (const entry of dir.values()) {
+                    if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.txt')) {
+                        try {
+                            const file = await entry.getFile();
+                            files.push({
+                                name: entry.name,
+                                lastModified: file.lastModified,
+                                size: file.size
+                            });
+                        } catch (err) {
+                            console.warn('[OPFS] Failed to read file handle for', entry.name, err);
+                        }
+                    }
+                }
+            } else if (typeof dir.entries === 'function' || dir[Symbol.asyncIterator]) {
+                for await (const [name, entry] of dir) {
+                    if (entry.kind === 'file' && name.toLowerCase().endsWith('.txt')) {
+                        try {
+                            const file = await entry.getFile();
+                            files.push({
+                                name: name,
+                                lastModified: file.lastModified,
+                                size: file.size
+                            });
+                        } catch (err) {
+                            console.warn('[OPFS] Failed to read file entry for', name, err);
+                        }
+                    }
                 }
             }
+
             // Sort by last updated descending
             files.sort((a, b) => b.lastModified - a.lastModified);
             return files;
