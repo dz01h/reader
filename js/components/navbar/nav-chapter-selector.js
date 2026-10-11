@@ -61,6 +61,18 @@ class NavChapterSelector extends Component {
             background: var(--color-surface, #f1f5f9);
         }
 
+        .toc-item.active {
+            background: rgba(102, 126, 234, 0.18);
+            color: #4f46e5;
+            font-weight: 600;
+        }
+
+        :host-context([data-theme="dark"]) .toc-item.active,
+        [data-theme="dark"] .toc-item.active {
+            background: rgba(129, 140, 248, 0.25);
+            color: #a5b4fc;
+        }
+
         .toc-item.empty {
             opacity: 0.5;
             cursor: default;
@@ -69,8 +81,8 @@ class NavChapterSelector extends Component {
 
     constructor() {
         super();
-        this.doc = null;
         this.chapters = {};
+        this.currentChapter = null;
         this.initComponent();
     }
 
@@ -99,7 +111,6 @@ class NavChapterSelector extends Component {
             }
         });
 
-
         host.appendChild(this.headerEl);
         host.appendChild(this.listEl);
 
@@ -110,15 +121,32 @@ class NavChapterSelector extends Component {
         // 預設為隱藏狀態
         this.close();
 
-        // 監聽 ReadingOperation: 取得閱讀文件實體與章節清單
+        // 監聽 ReadingPanelRenderOver: 取得閱讀進度、章節清單與當前章節 (doc指標由 ReadingPanel 持有)
+        document.body.addEventListener('ReadingPanelRenderOver', e => {
+            const data = e.detail;
+            if (!data) return;
+
+            if (data.chapters !== undefined) {
+                const newKeys = Object.keys(data.chapters || {}).join('|');
+                const oldKeys = Object.keys(this.chapters || {}).join('|');
+                if (newKeys !== oldKeys) {
+                    this.chapters = data.chapters || {};
+                    this.renderList();
+                }
+            }
+
+            if (data.currentChapter !== undefined) {
+                this.currentChapter = data.currentChapter;
+                if (this.isOpen) {
+                    this.highlightCurrentChapter();
+                }
+            }
+        });
+
+        // 監聽 reset 操作以清空章節清單
         document.body.addEventListener('ReadingOperation', e => {
-            if (e.detail?.action === 'read' && e.detail.params?.[0]) {
-                const doc = e.detail.params[0];
-                this.doc = doc;
-                this.chapters = (typeof doc.getChapters === 'function' ? doc.getChapters() : {}) || {};
-                this.renderList();
-            } else if (e.detail?.action === 'reset') {
-                this.doc = null;
+            if (e.detail?.action === 'reset') {
+                this.currentChapter = null;
                 this.chapters = {};
                 this.renderList();
                 this.close();
@@ -135,6 +163,33 @@ class NavChapterSelector extends Component {
     open() {
         this.classList.remove('hidden');
         this.removeAttribute('hidden');
+        this.highlightCurrentChapter();
+    }
+
+    highlightCurrentChapter() {
+        if (!this.listEl) return;
+
+        // 清除先前的高亮標記
+        this.listEl.querySelectorAll('.toc-item.active').forEach(el => el.classList.remove('active'));
+
+        if (!this.currentChapter || !this.currentChapter.title) return;
+
+        const items = this.listEl.querySelectorAll('.toc-item:not(.empty)');
+        let matchedEl = null;
+
+        for (const item of items) {
+            if (item.textContent.trim() === this.currentChapter.title.trim()) {
+                matchedEl = item;
+                break;
+            }
+        }
+
+        if (matchedEl) {
+            matchedEl.classList.add('active');
+            requestAnimationFrame(() => {
+                matchedEl.scrollIntoView({ block: 'center', behavior: 'auto' });
+            });
+        }
     }
 
     close() {

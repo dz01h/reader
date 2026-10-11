@@ -81,7 +81,6 @@ class NavProgressBar extends Component {
         super();
         this.progress = 0;
         this.isDragging = false;
-        this.doc = null;
         this.chapters = {};
         this.chapterEntries = [];
         this.initComponent();
@@ -101,19 +100,26 @@ class NavProgressBar extends Component {
         innerStyle.replaceSync(NavProgressBar.DEFAULT_STYLE);
         host.adoptedStyleSheets = [innerStyle];
 
-        // 監聽 ReadingOperation: 取得閱讀文件實體與章節清單
-        document.body.addEventListener('ReadingOperation', e => {
-            if (e.detail?.action === 'read' && e.detail.params?.[0]) {
-                const doc = e.detail.params[0];
-                this.doc = doc;
-                this.chapters = (typeof doc.getChapters === 'function' ? doc.getChapters() : {}) || {};
+        // 監聽閱讀面板渲染進度更新 (doc指標由 ReadingPanel 持有)
+        document.body.addEventListener('ReadingPanelRenderOver', e => {
+            if (this.isDragging) return;
+            const data = e.detail;
+            if (!data) return;
+
+            if (data.chapters !== undefined) {
+                this.chapters = data.chapters || {};
                 this.chapterEntries = Object.entries(this.chapters);
-                this.progress = doc.progress || 0;
-                this.cursor.style.display = 'block';
-                this.updateCursorPosition(this.progress);
-                this.render();
-            } else if (e.detail?.action === 'reset') {
-                this.doc = null;
+            }
+
+            this.progress = typeof data.progress === 'number' ? data.progress : 0;
+            this.cursor.style.display = 'block';
+            this.updateCursorPosition(this.progress);
+            this.render();
+        });
+
+        // 監聽 reset 操作以清空進度條
+        document.body.addEventListener('ReadingOperation', e => {
+            if (e.detail?.action === 'reset') {
                 this.chapters = {};
                 this.chapterEntries = [];
                 this.progress = 0;
@@ -122,15 +128,6 @@ class NavProgressBar extends Component {
                 this.cursor.removeAttribute('chapter');
                 this.render();
             }
-        });
-
-        // 監聽閱讀面板渲染進度更新（拖曳時不被外部覆蓋）
-        document.body.addEventListener('ReadingPanelRenderOver', e => {
-            if (this.isDragging) return;
-            this.progress = e.detail && typeof e.detail.progress === 'number' ? e.detail.progress : 0;
-            this.cursor.style.display = 'block';
-            this.updateCursorPosition(this.progress);
-            this.render();
         });
 
         // 拖曳 (Drag) 與 點擊 (Click) 事件處理 (使用 Pointer Events 支援滑鼠與觸控)
@@ -192,10 +189,6 @@ class NavProgressBar extends Component {
     }
 
     getChapterTitle(prog) {
-        if (this.doc && typeof this.doc.getCurrentChapter === 'function') {
-            const ch = this.doc.getCurrentChapter(prog);
-            if (ch && ch.title) return ch.title;
-        }
         if (this.chapterEntries && this.chapterEntries.length > 0) {
             let currentTitle = this.chapterEntries[0][0];
             for (let i = 0; i < this.chapterEntries.length; i++) {

@@ -69,6 +69,13 @@ class ReadingPanel extends Component {
         if (this.ctx && this.canvas) {
             this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         }
+        this.fireEvent('ReadingPanelRenderOver', {
+            progress: 0,
+            lines: [],
+            chapters: {},
+            currentChapter: null,
+            docTitle: ''
+        }, true);
     }
 
     resize() {
@@ -164,6 +171,15 @@ class ReadingPanel extends Component {
         // Fire ReadingPanelRenderOver event with visible text ONLY when stable (debounced / committed)
         if (stable) {
             this.saveProgress();
+            if (rendingData && this.doc) {
+                rendingData.currentChapter = typeof this.doc.getCurrentChapter === 'function'
+                    ? this.doc.getCurrentChapter()
+                    : null;
+                rendingData.chapters = typeof this.doc.getChapters === 'function'
+                    ? this.doc.getChapters()
+                    : {};
+                rendingData.docTitle = this.doc.title || '';
+            }
             this.fireEvent('ReadingPanelRenderOver', rendingData, true);
         }
     }

@@ -53,8 +53,8 @@ export class ActionToggleChapterSelector extends Action {
     }
 
     onClick(e) {
-        // 防止觸控設備在 pointerup 開啟後，後續延遲合成的 click 事件立刻判定為 outside click 而瞬間關閉
-        if (Date.now() - (this._lastToggleTime || 0) < 400) {
+        // 防止觸控設備在切換後，任何延遲合成的 click 事件立刻判定為 outside click 而瞬間關閉
+        if (Date.now() - (this._lastToggleTime || 0) < 600) {
             return;
         }
 

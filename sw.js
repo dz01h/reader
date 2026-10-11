@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zen-reader-v85';
+const CACHE_NAME = 'zen-reader-v87';
 const urlsToCache = [
   './',
   './index.html',

@@ -75,22 +75,12 @@ class ActionButton extends Component {
             if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
             if (this.hasAttribute('disabled')) return;
             this.classList.add('active');
-            if (this.setPointerCapture && e.pointerId != null) {
-                try {
-                    this.setPointerCapture(e.pointerId);
-                } catch (_) {}
-            }
         });
 
         this.addEventListener('pointerup', (e) => {
             if (this.hasAttribute('disabled')) return;
             const wasActive = this.classList.contains('active');
             this.classList.remove('active');
-            if (this.releasePointerCapture && e.pointerId != null) {
-                try {
-                    this.releasePointerCapture(e.pointerId);
-                } catch (_) {}
-            }
 
             if (wasActive) {
                 if (typeof this.getBoundingClientRect === 'function') {
@@ -101,12 +91,14 @@ class ActionButton extends Component {
                         e.clientY >= rect.top &&
                         e.clientY <= rect.bottom
                     ) {
+                        this._preventClickUntil = Date.now() + 600;
                         this.triggerAction();
                         return;
                     }
                 }
                 // If bounding rect is 0 (e.g. in headless / synthetic test), fallback trigger
                 if (typeof window !== 'undefined' && (!this.offsetWidth && !this.offsetHeight)) {
+                    this._preventClickUntil = Date.now() + 600;
                     this.triggerAction();
                 }
             }
@@ -114,18 +106,20 @@ class ActionButton extends Component {
 
         this.addEventListener('pointercancel', (e) => {
             this.classList.remove('active');
-            if (this.releasePointerCapture && e.pointerId != null) {
-                try {
-                    this.releasePointerCapture(e.pointerId);
-                } catch (_) {}
-            }
         });
 
         // Fallback for click if pointerup wasn't triggered or on touch / keyboard
         this.addEventListener('click', (e) => {
+            if (this._preventClickUntil && Date.now() < this._preventClickUntil) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
             if (this.hasAttribute('disabled')) return;
-            // Prevent double triggers if pointerup already handled it within 400ms
-            if (this._lastActionTrigger && (Date.now() - this._lastActionTrigger < 400)) {
+            // Prevent double triggers if pointerup already handled it within 500ms
+            if (this._lastActionTrigger && (Date.now() - this._lastActionTrigger < 500)) {
+                e.preventDefault();
+                e.stopPropagation();
                 return;
             }
             this.triggerAction();
