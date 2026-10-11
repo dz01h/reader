@@ -58,7 +58,8 @@ class TextRenderEngine {
      * Number of lines visible on a single page
      */
     get linesPerPage() {
-        return Math.max(1, Math.floor(this.lineFlowSpan / this.lineHeight));
+        if (this.lineFlowSpan < this.fontSize) return 1;
+        return Math.max(1, 1 + Math.floor((this.lineFlowSpan - this.fontSize) / this.lineHeight));
     }
 
     /**
@@ -348,13 +349,13 @@ class TextRenderEngine {
         const wordSpacing = options.wordSpacing !== undefined ? options.wordSpacing : (this.wordSpacing || 0);
 
         const isVert = writingMode === 'vertical';
-        const lineHeight = fontSize * lineHeightRatio;
+        const lineHeight = Math.ceil(fontSize * lineHeightRatio);
 
         // Effective linesPerPage based on resolved logical options
         const span = isVert
             ? Math.max(0, width - margins.left - margins.right)
             : Math.max(0, height - margins.top - margins.bottom);
-        const linesPerPage = span < fontSize ? 1 : Math.max(1, Math.floor(span / lineHeight));
+        const linesPerPage = span < fontSize ? 1 : Math.max(1, 1 + Math.floor((span - fontSize) / lineHeight));
         const contentSize = lineHeight * (linesPerPage - 1) + fontSize;
         const gridPadding = Math.max(0, Math.floor((span - contentSize) / 2));
 
@@ -392,8 +393,12 @@ class TextRenderEngine {
                 const y = margins.top;
 
                 // Viewport horizontal culling
-                if (x + fontSize < margins.left || x > width - margins.right) {
-                    continue;
+                if (scrollOffset === 0) {
+                    if (relativeIdx < 0 || relativeIdx >= linesPerPage) continue;
+                } else {
+                    if (x + fontSize < margins.left || x > width - margins.right) {
+                        continue;
+                    }
                 }
                 this.renderVerticalLine(ctx, lineText, x, y, fontSize, wordSpacing);
             } else {
@@ -401,8 +406,12 @@ class TextRenderEngine {
                 const y = margins.top + gridPadding + lineShift + scrollOffset;
 
                 // Viewport vertical culling
-                if (y + lineHeight < margins.top || y > height - margins.bottom) {
-                    continue;
+                if (scrollOffset === 0) {
+                    if (relativeIdx < 0 || relativeIdx >= linesPerPage) continue;
+                } else {
+                    if (y + lineHeight < margins.top || y > height - margins.bottom) {
+                        continue;
+                    }
                 }
                 this.renderHorizontalLine(ctx, lineText, x, y, fontSize, wordSpacing);
             }

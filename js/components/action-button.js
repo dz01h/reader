@@ -124,8 +124,8 @@ class ActionButton extends Component {
         // Fallback for click if pointerup wasn't triggered or on touch / keyboard
         this.addEventListener('click', (e) => {
             if (this.hasAttribute('disabled')) return;
-            // Prevent double triggers if pointerup already handled it within 350ms
-            if (this._lastActionTrigger && (Date.now() - this._lastActionTrigger < 350)) {
+            // Prevent double triggers if pointerup already handled it within 400ms
+            if (this._lastActionTrigger && (Date.now() - this._lastActionTrigger < 400)) {
                 return;
             }
             this.triggerAction();
